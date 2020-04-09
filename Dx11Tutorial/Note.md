@@ -190,3 +190,16 @@ void OMSetRenderTargets(
   [in]  ID3D11DepthStencilView *pDepthStencilView
 );
 ```
+
+### 其他问题
+
+* LNK2019无法解析的外部符号
+
+#pragma comment ( lib, "D3D11.lib"), 链接对应的库即可
+
+* 无法解析的外部符号___vsnprintf
+
+出现这个问题的原因是vs2017默认编译时将许多标准库采用内联方式处理，因而没有可以链接的标准库文件，所以要专门添加标准库文件来链接标准库中的函数。
+
+根据链接添加库文件legacy_stdio_definitions.lib
+<https://jingyan.baidu.com/article/48206aeab8516f216ad6b38c.html>

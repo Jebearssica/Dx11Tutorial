@@ -1,4 +1,4 @@
-//Include and link appropriate libraries and headers//
+//Include and link appropriate libraries and headers, 解决LNK2019 无法解析的外部符号
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "d3dx11.lib")
 #pragma comment(lib, "d3dx10.lib")
