@@ -26,5 +26,8 @@
     <None Include="..\README.md">
       <Filter>资源文件</Filter>
     </None>
+    <None Include="Effects.fx">
+      <Filter>资源文件</Filter>
+    </None>
   </ItemGroup>
 </Project>

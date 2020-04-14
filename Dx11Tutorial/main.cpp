@@ -11,15 +11,15 @@
 #include <xnamath.h>
 #include<DxErr.h>//用于错误抛出
 
-LPCTSTR WndClassName = "firstwindow";//窗体名称
-HWND hwnd = NULL;//窗体进程
-
 /* 全局变量 */
 
-//窗口大小
-const int WIDTH = 800;
-const int HEIGHT = 600;
+LPCTSTR WndClassName = "firstwindow";//窗体名称
+HWND hwnd = NULL;//窗体进程
+//窗口长宽
+const int WIDTH = 300;
+const int HEIGHT = 300;
 
+//交换链以及d3d设备、上下文、渲染目标视图
 IDXGISwapChain* SwapChain;
 ID3D11Device* D3d11Device;
 ID3D11DeviceContext* D3d11DeviceContent;
@@ -31,6 +31,27 @@ float blue = 0.0f;
 int colormodr = 1;
 int colormodg = 1;
 int colormodb = 1;
+HRESULT hr;	//用于错误监测
+
+ID3D11Buffer* triangleVertBuffer;//顶点缓存
+ID3D11VertexShader* VS;//顶点着色器
+ID3D11PixelShader* PS;//像素着色器
+ID3D10Blob* VS_Buffer;//顶点着色器缓存
+ID3D10Blob* PS_Buffer;//像素着色器缓存
+ID3D11InputLayout* vertexLayout;//顶点输入布局
+struct Vertex//顶点结构
+{
+	Vertex() {}
+	Vertex(float x, float y, float z) :position(x, y, z) {}
+
+	XMFLOAT3 position;
+};
+//输入布局
+D3D11_INPUT_ELEMENT_DESC layout[] =
+{
+	{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0}
+};
+UINT numElements = ARRAYSIZE(layout);//保存布局数组的大小
 
 /* ** 全局变量 ** */
 
@@ -38,9 +59,9 @@ int colormodb = 1;
 
 //窗口初始化,涉及类、窗口创建以及窗口显示与更新
 bool InitializeWindow(HINSTANCE hInstance, int ShowWnd, int Width, int Height, bool windowed);
-//主体
+//运行主体
 int MessageLoop();
-//按键响应,涉及esc键以及窗口销毁
+//按键响应,涉及esc热键退出以及窗口销毁
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 //d3d初始化
@@ -74,7 +95,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		MessageBox(0, "Scene Initialization Failed!", "ERROR", MB_OK);
 		return 0;
 	}
-	
+
 	//主体
 	MessageLoop();
 
@@ -166,8 +187,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 bool InitializeDirect3dApp(HINSTANCE hInstance)
 {
-	HRESULT hr;	//用于错误监测
-
 	DXGI_MODE_DESC bufferDesc;// 后置缓冲
 	ZeroMemory(&bufferDesc, sizeof(DXGI_MODE_DESC));//确保对象清空
 	bufferDesc.Width = WIDTH;
@@ -233,35 +252,101 @@ void RealeaseObjects()
 	SwapChain->Release();
 	D3d11Device->Release();
 	D3d11DeviceContent->Release();
+
+	//渲染视图释放
+	RenderTargetView->Release();
+
+	//着色器释放
+	VS->Release();
+	PS->Release();
+	//着色器缓存释放
+	VS_Buffer->Release();
+	PS_Buffer->Release();
+	//输入布局释放
+	vertexLayout->Release();
+
 }
 
 //在这里放置物体,贴图,加载模型,音乐
 bool InitializeScene()
 {
+	//顶点着色器与像素着色器通过文件编译
+	hr = D3DX11CompileFromFile("Effects.fx", 0, 0, "VS", "vs_4_0", 0, 0, 0, &VS_Buffer, 0, 0);
+	hr = D3DX11CompileFromFile("Effects.fx", 0, 0, "PS", "ps_4_0", 0, 0, 0, &PS_Buffer, 0, 0);
+	//着色器创建
+	hr = D3d11Device->CreateVertexShader(
+		VS_Buffer->GetBufferPointer(), VS_Buffer->GetBufferSize(), NULL, &VS);
+	hr = D3d11Device->CreatePixelShader(
+		PS_Buffer->GetBufferPointer(), PS_Buffer->GetBufferSize(), NULL, &PS);
+	//着色器设置
+	D3d11DeviceContent->VSSetShader(VS, 0, 0);
+	D3d11DeviceContent->PSSetShader(PS, 0, 0);
+	//顶点缓存创建
+	Vertex v[] =
+	{
+		Vertex(0.0f, 0.5f, 0.5f),
+		Vertex(0.5f, -0.5f, 0.5f),
+		Vertex(-0.5f, -0.5f, 0.5f),
+	};
+	//顶点缓存描述及初始化
+	D3D11_BUFFER_DESC vertexBufferDesc;
+	ZeroMemory(&vertexBufferDesc, sizeof(D3D11_BUFFER_DESC));
+	vertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	vertexBufferDesc.ByteWidth = sizeof(Vertex) * 3;
+	vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	vertexBufferDesc.CPUAccessFlags = 0;
+	vertexBufferDesc.MiscFlags = 0;
+	//顶点子资源初始化
+	D3D11_SUBRESOURCE_DATA vertexBufferData;
+	ZeroMemory(&vertexBufferData, sizeof(D3D11_SUBRESOURCE_DATA));
+	vertexBufferData.pSysMem = v;
+	hr = D3d11Device->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &triangleVertBuffer);
+	//顶点缓存设置
+	UINT stride = sizeof(Vertex);//顶点大小
+	UINT offset = 0;//偏移量
+	D3d11DeviceContent->IASetVertexBuffers(0, 1,
+		&triangleVertBuffer, &stride, &offset);//顶点缓存与IA绑定
+	//顶点输入布局
+	hr = D3d11Device->CreateInputLayout(layout, numElements,
+		VS_Buffer->GetBufferPointer(), VS_Buffer->GetBufferSize(), &vertexLayout);
+	//顶点输入布局与IA绑定
+	D3d11DeviceContent->IASetInputLayout(vertexLayout);
+	//图元拓扑设置, 三角形带传输
+	D3d11DeviceContent->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	//创建视图并初始化
+	D3D11_VIEWPORT viewport;
+	ZeroMemory(&viewport, sizeof(D3D11_VIEWPORT));
+	//起始位置为(0,0),即窗口的最左上角,并使得长宽与窗口相同,从而使得视图覆盖整个窗口
+	viewport.TopLeftX = 0;
+	viewport.TopLeftY = 0;
+	viewport.Width = WIDTH;
+	viewport.Height = HEIGHT;
+	//视图设置, 绑定至光栅着色器
+	D3d11DeviceContent->RSSetViewports(1, &viewport);
 	return true;
 }
 
 void UpdateScene()
 {
-	//改变背景色,反正搞不懂rgb色彩调整
-	red += colormodr * 0.00005f;
-	green += colormodg * 0.00002f;
-	blue += colormodb * 0.00001f;
+	////改变背景色,反正搞不懂rgb色彩调整
+	//red += colormodr * 0.00005f;
+	//green += colormodg * 0.00002f;
+	//blue += colormodb * 0.00001f;
 
-	if (red >= 1.0f || red <= 0.0f)
-		colormodr *= -1;
-	if (green >= 1.0f || green <= 0.0f)
-		colormodg *= -1;
-	if (blue >= 1.0f || blue <= 0.0f)
-		colormodb *= -1;
+	//if (red >= 1.0f || red <= 0.0f)
+	//	colormodr *= -1;
+	//if (green >= 1.0f || green <= 0.0f)
+	//	colormodg *= -1;
+	//if (blue >= 1.0f || blue <= 0.0f)
+	//	colormodb *= -1;
 }
 
 void DrawScene()
 {
-	//清除后置缓存 更新背景色
-	D3DXCOLOR bgColor(red, green, blue, 1.0f);//对应rgba
-	D3d11DeviceContent->ClearRenderTargetView(RenderTargetView, bgColor);//前置缓存更新
-	SwapChain->Present(0, 0);//通过交换链输出
+	float bgColor[4] = { (0.0f, 0.0f, 0.0f, 0.0f) };//背景颜色初始化为黑
+	D3d11DeviceContent->ClearRenderTargetView(RenderTargetView, bgColor);//背景颜色清空
+	D3d11DeviceContent->Draw(3, 0);
+	SwapChain->Present(0, 0);//交换链将前置缓存映射到显示器
 }
 
 /* ** 函数实现 ** */
