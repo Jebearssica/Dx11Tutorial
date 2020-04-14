@@ -20,10 +20,13 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="README.md">
+    <None Include="Note.md">
       <Filter>资源文件</Filter>
     </None>
-    <None Include="Note.md">
+    <None Include="..\README.md">
+      <Filter>资源文件</Filter>
+    </None>
+    <None Include="Effects.fx">
       <Filter>资源文件</Filter>
     </None>
   </ItemGroup>
