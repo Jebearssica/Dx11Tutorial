@@ -57,6 +57,9 @@ LPCTSTR WndClassName = L"firstwindow";
 
 ## Tutorial2: Initializing Direct3D 11
 
+更多DirectX的API说明可查阅微软官网
+<https://docs.microsoft.com/zh-cn/windows/win32/api/d3d11/>
+
 ### 新知识
 
 * 双缓冲: 为了解决窗体进行复杂图像处理后,屏幕在重绘时由于过频的刷新引起闪烁的问题
@@ -612,6 +615,7 @@ git rebase --skip 跳过冲突, 将分支起始点移动到主干的起始点
 ### 新知识
 
 * 代码中的注释应该尽可能的加上改动的时间以及原因, 而不仅仅是在文档中写出, 增加可读性(会太复杂吗?)
+  * 因此tutorial4以及之后的更新, 代码中均会有注释体现, 没有的就是前三个tutorial的更新
 
 ### 编译问题
 
@@ -620,6 +624,60 @@ git rebase --skip 跳过冲突, 将分支起始点移动到主干的起始点
   * 项目属性已添加了x64的源文件
 * 项目属性已添加了x64的源文件, 报无法打开d3dx11.lib
   * 老老实实x86编译, Todo: x86与x64编译区别
+
+## Tutorial5: Indices
+
+### 新知识
+
+#### 索引
+
+索引(index)的适用范围:
+
+* 绘制几何图形
+* 加载模型
+
+功能: 减少加载重复的顶点, 有些顶点被共用, 会被多次写入缓存, 使用索引缓存可以避免
+
+```c++
+//没有索引缓存, 通过两个三角形构成一个长方形
+vertex = {v1, v2, v3, v3, v2, v4};
+//有索引缓存, 直接实现
+vertex = {v1, v2, v3, v4};
+index = {1, 2, 3, 3, 2, 4};
+```
+
+这就是第一次接触到面片, 绝大部分图形通过三角形进行模拟
+
+#### DWORD
+
+表示unsigned long
+
+### 函数与类
+
+#### D3D11DeviceContext::DrawIndexed()
+
+通过索引缓存绘制
+
+* IndexCount: 绘制的索引个数
+* StartIndexLocation: 起始点索引缓冲的偏移量
+* BaseVertexLocation: StartIndexLocation的偏移量
+  * 即m_pImmediateContext->DrawIndexed(3, 3, 0) 画234
+  * m_pImmediateContext->DrawIndexed(3, 0, 3) 画345(0+3,1+3,2+3)
+  * 应用范围: 很难距离, 以后补充(?)
+
+```c++
+void DrawIndexed(
+  UINT IndexCount,
+  UINT StartIndexLocation,
+  INT  BaseVertexLocation
+);
+```
+
+### 编译问题
+
+* 编译完成但是背景黑色不显示正方形
+  * D3d11DeviceContent->IASetIndexBuffer(squareIndexBuffer, DXGI_FORMAT_R32_UINT, 0);
+    * 编码格式是DXGI_FORMAT_R32_UINT不是DXGI_FORMAT_R32_FLOAT
 
 [1]:images/render-pipeline-stages.png
 [2]:images/basic-rebase-1.png
