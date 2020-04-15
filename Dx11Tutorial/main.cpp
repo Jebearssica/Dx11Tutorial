@@ -33,7 +33,7 @@ int colormodg = 1;
 int colormodb = 1;
 HRESULT hr;	//用于错误监测
 
-ID3D11Buffer* triangleVertBuffer;//顶点缓存
+//ID3D11Buffer* triangleVertBuffer;//三角形顶点缓存, tutorial5: 被正方形顶点缓存替代
 ID3D11VertexShader* VS;//顶点着色器
 ID3D11PixelShader* PS;//像素着色器
 ID3D10Blob* VS_Buffer;//顶点着色器缓存
@@ -56,6 +56,11 @@ D3D11_INPUT_ELEMENT_DESC layout[] =
 	{"COLOR",0,DXGI_FORMAT_R32G32B32A32_FLOAT,0,12,D3D11_INPUT_PER_VERTEX_DATA,0},//偏移量
 };
 UINT numElements = ARRAYSIZE(layout);//保存布局数组的大小
+
+//tutorial5: 加入索引缓存, 为了展示索引的功能, 加入矩形演示
+//矩形的顶点缓存与索引缓存
+ID3D11Buffer* squareIndexBuffer;
+ID3D11Buffer* squareVertexBuffer;
 
 /* ** 全局变量 ** */
 
@@ -192,7 +197,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 bool InitializeDirect3dApp(HINSTANCE hInstance)
 {
 	DXGI_MODE_DESC bufferDesc;// 后置缓冲
-	ZeroMemory(&bufferDesc, sizeof(DXGI_MODE_DESC));//确保对象清空
+	ZeroMemory(&bufferDesc, sizeof(bufferDesc));//确保对象清空, tutorial5 :使用变量名做为初始化的参数, 而非类型名
 	bufferDesc.Width = WIDTH;
 	bufferDesc.Height = HEIGHT;
 	//60Hz: 60/1
@@ -202,8 +207,8 @@ bool InitializeDirect3dApp(HINSTANCE hInstance)
 	bufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
 	bufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
 
-	DXGI_SWAP_CHAIN_DESC swapChainDesc;//交换链
-	ZeroMemory(&swapChainDesc, sizeof(DXGI_SWAP_CHAIN_DESC));//确保对象清空
+	DXGI_SWAP_CHAIN_DESC swapChainDesc;//交换链,
+	ZeroMemory(&swapChainDesc, sizeof(swapChainDesc));//确保对象清空, tutorial5: 使用变量名做为初始化的参数, 而非类型名
 	swapChainDesc.BufferDesc = bufferDesc;
 	swapChainDesc.SampleDesc.Count = 1;
 	swapChainDesc.SampleDesc.Quality = 0;
@@ -260,6 +265,10 @@ void RealeaseObjects()
 	//渲染视图释放
 	RenderTargetView->Release();
 
+	//tutorial5: 释放新增的正方形顶点缓存与索引缓存
+	squareIndexBuffer->Release();
+	squareVertexBuffer->Release();
+
 	//着色器释放
 	VS->Release();
 	PS->Release();
@@ -285,31 +294,64 @@ bool InitializeScene()
 	//着色器设置
 	D3d11DeviceContent->VSSetShader(VS, 0, 0);
 	D3d11DeviceContent->PSSetShader(PS, 0, 0);
-	//顶点缓存创建, tutorial4: 增加RGBA颜色元素
+	//顶点集合创建, tutorial4: 增加RGBA颜色元素
+	//tutorial5: 顶点集合设置为四个, 绘制正方形
 	Vertex v[] =
 	{
-		Vertex(0.0f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 1.0f),//红
-		Vertex(0.5f, -0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f),//绿
-		Vertex(-0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f),//蓝 最基本的rgb还是看得懂
+		Vertex(-0.5f, -0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 1.0f),
+		Vertex(-0.5f,  0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f),
+		Vertex(0.5f,  0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f),
+		Vertex(0.5f, -0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f),
 	};
-	//顶点缓存描述及初始化
+	//tutorial5: 增加索引,点012构成一个三角形,023构成另一个, 因为布局通过三角形进行传输
+	DWORD indices[]=
+	{
+		0,1,2,
+		0,2,3,
+	};
+
+	//tutorial5: 初始化索引缓存, 使用变量名做为初始化的参数, 而非类型名
+	D3D11_BUFFER_DESC indexBufferDesc;
+	ZeroMemory(&indexBufferDesc, sizeof(indexBufferDesc));
+	/*  tutorial5: 
+		索引缓存设置,每个矩形由两个片面构成
+		ByteWidth: 每个片面由三个顶点构成, 每个顶点占用indices数组一个DWORD长度
+	*/
+	indexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	indexBufferDesc.ByteWidth = sizeof(DWORD) * 2 * 3;
+	indexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	indexBufferDesc.CPUAccessFlags = 0;
+	indexBufferDesc.MiscFlags = 0;
+	//tutorial5: 索引缓存创建与IA绑定
+	D3D11_SUBRESOURCE_DATA indexInitialData;
+	indexInitialData.pSysMem = indices;
+	D3d11Device->CreateBuffer(&indexBufferDesc, &indexInitialData, &squareIndexBuffer);
+	D3d11DeviceContent->IASetIndexBuffer(squareIndexBuffer, DXGI_FORMAT_R32_UINT, 0);
+
+	/*
+		顶点缓存描述及初始化
+	tutorial5:
+		初始化正方形顶点缓存, 将三角形顶点缓存换成正方形顶点缓存
+		使用变量名做为初始化的参数, 而非类型名
+		创建了新的顶点集后, 需要更新顶点缓存设置
+	*/
 	D3D11_BUFFER_DESC vertexBufferDesc;
-	ZeroMemory(&vertexBufferDesc, sizeof(D3D11_BUFFER_DESC));
+	ZeroMemory(&vertexBufferDesc, sizeof(vertexBufferDesc));
 	vertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
-	vertexBufferDesc.ByteWidth = sizeof(Vertex) * 3;
+	vertexBufferDesc.ByteWidth = sizeof(Vertex) * 4;
 	vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	vertexBufferDesc.CPUAccessFlags = 0;
 	vertexBufferDesc.MiscFlags = 0;
-	//顶点子资源初始化
+	//顶点子资源初始化, tutorial5:使用变量名做为初始化的参数, 而非类型名
 	D3D11_SUBRESOURCE_DATA vertexBufferData;
-	ZeroMemory(&vertexBufferData, sizeof(D3D11_SUBRESOURCE_DATA));
+	ZeroMemory(&vertexBufferData, sizeof(vertexBufferData));
 	vertexBufferData.pSysMem = v;
-	hr = D3d11Device->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &triangleVertBuffer);
+	hr = D3d11Device->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &squareVertexBuffer);
 	//顶点缓存设置
 	UINT stride = sizeof(Vertex);//顶点大小
 	UINT offset = 0;//偏移量
 	D3d11DeviceContent->IASetVertexBuffers(0, 1,
-		&triangleVertBuffer, &stride, &offset);//顶点缓存与IA绑定
+		&squareVertexBuffer, &stride, &offset);//顶点缓存与IA绑定
 	//顶点输入布局
 	hr = D3d11Device->CreateInputLayout(layout, numElements,
 		VS_Buffer->GetBufferPointer(), VS_Buffer->GetBufferSize(), &vertexLayout);
@@ -317,9 +359,9 @@ bool InitializeScene()
 	D3d11DeviceContent->IASetInputLayout(vertexLayout);
 	//图元拓扑设置, 三角形带传输
 	D3d11DeviceContent->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	//创建视图并初始化
+	//创建视图并初始化, tutorial5:使用变量名做为初始化的参数, 而非类型名
 	D3D11_VIEWPORT viewport;
-	ZeroMemory(&viewport, sizeof(D3D11_VIEWPORT));
+	ZeroMemory(&viewport, sizeof(viewport));
 	//起始位置为(0,0),即窗口的最左上角,并使得长宽与窗口相同,从而使得视图覆盖整个窗口
 	viewport.TopLeftX = 0;
 	viewport.TopLeftY = 0;
@@ -347,10 +389,15 @@ void UpdateScene()
 
 void DrawScene()
 {
+	//背景颜色清空
 	float bgColor[4] = { (0.0f, 0.0f, 0.0f, 0.0f) };//背景颜色初始化为黑
 	D3d11DeviceContent->ClearRenderTargetView(RenderTargetView, bgColor);//背景颜色清空
-	D3d11DeviceContent->Draw(3, 0);
-	SwapChain->Present(0, 0);//交换链将前置缓存映射到显示器
+
+	//tutorial5: 使用DrawIndexed()绘制正方形
+	D3d11DeviceContent->DrawIndexed(6, 0, 0);
+
+	//交换链将前置缓存映射到显示器, 即图像呈现
+	SwapChain->Present(0, 0);
 }
 
 /* ** 函数实现 ** */
