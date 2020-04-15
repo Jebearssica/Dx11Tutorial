@@ -42,14 +42,18 @@ ID3D11InputLayout* vertexLayout;//顶点输入布局
 struct Vertex//顶点结构
 {
 	Vertex() {}
-	Vertex(float x, float y, float z) :position(x, y, z) {}
+	//tutorial4: 增加RGBA颜色元素
+	Vertex(float x, float y, float z,
+		float cr, float cg, float cb, float ca) : position(x, y, z), color(cr, cg, cb, ca) {}
 
 	XMFLOAT3 position;
+	XMFLOAT4 color;
 };
 //输入布局
 D3D11_INPUT_ELEMENT_DESC layout[] =
 {
-	{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0}
+	{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0},
+	{"COLOR",0,DXGI_FORMAT_R32G32B32A32_FLOAT,0,12,D3D11_INPUT_PER_VERTEX_DATA,0},//偏移量
 };
 UINT numElements = ARRAYSIZE(layout);//保存布局数组的大小
 
@@ -281,12 +285,12 @@ bool InitializeScene()
 	//着色器设置
 	D3d11DeviceContent->VSSetShader(VS, 0, 0);
 	D3d11DeviceContent->PSSetShader(PS, 0, 0);
-	//顶点缓存创建
+	//顶点缓存创建, tutorial4: 增加RGBA颜色元素
 	Vertex v[] =
 	{
-		Vertex(0.0f, 0.5f, 0.5f),
-		Vertex(0.5f, -0.5f, 0.5f),
-		Vertex(-0.5f, -0.5f, 0.5f),
+		Vertex(0.0f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 1.0f),//红
+		Vertex(0.5f, -0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f),//绿
+		Vertex(-0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f),//蓝 最基本的rgb还是看得懂
 	};
 	//顶点缓存描述及初始化
 	D3D11_BUFFER_DESC vertexBufferDesc;
