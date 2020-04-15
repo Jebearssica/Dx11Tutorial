@@ -265,8 +265,8 @@ D3D11_INPUT_ELEMENT_DESC layout[] =
 
 #### HS: Hull Shader
 
-* 外壳着色器阶段(HS)，细化器阶段(TS)和域着色器阶段(DS)这三个新阶段共同协作以实现称为镶嵌(tesselation)的东西。
-  * 作用是将一个图元（例如三角形或直线）分割成许多较小的部分，从而以极快的速度增加模型的细节。
+* 外壳着色器阶段(HS). 细化器阶段(TS)和域着色器阶段(DS)这三个新阶段共同协作以实现称为镶嵌(tesselation)的东西。
+  * 作用是将一个图元（例如三角形或直线）分割成许多较小的部分. 从而以极快的速度增加模型的细节。
   * 在显示之前, 先将图元在GPU中创建, 然后直接映射到屏幕
     * 作用: 降低了在CPU 内存中创建的时间
 
@@ -282,18 +282,18 @@ D3D11_INPUT_ELEMENT_DESC layout[] =
 
 #### GS: Geometry Shader
 
-在顶点和片段着色器之间有一个可选的着色器，叫做几何着色器(Geometry Shader)。几何着色器以一个或多个表示为一个单独基本图形（primitive）的顶点作为输入，比如可以是一个点或者三角形。几何着色器在将这些顶点发送到下一个着色阶段之前，可以将这些顶点转变为它认为合适的内容。几何着色器有意思的地方在于它可以把（一个或多个）顶点转变为完全不同的基本图形（primitive），从而生成比原来多得多的顶点。
+在顶点和片段着色器之间有一个可选的着色器. 叫做几何着色器(Geometry Shader)。几何着色器以一个或多个表示为一个单独基本图形（primitive）的顶点作为输入. 比如可以是一个点或者三角形。几何着色器在将这些顶点发送到下一个着色阶段之前. 可以将这些顶点转变为它认为合适的内容。几何着色器有意思的地方在于它可以把（一个或多个）顶点转变为完全不同的基本图形（primitive）. 从而生成比原来多得多的顶点。
 
 #### SO: Stream Output
 
-用于从管线中获取顶点数据，特别是在没有GS的情况下
+用于从管线中获取顶点数据. 特别是在没有GS的情况下
 
 * 从SO输出的顶点数据始终以列表形式发送至内存, 永远不会发出不完整的图元
   * 不完整的图元: 例如一个只有两个顶点信息的三角形
 
 #### RS: Rasterization Stage
 
-RS阶段获取发送给它的矢量信息（形状和图元），并通过在每个图元之间插入每个顶点的值将它们转换为像素。 它还处理裁剪，基本上是裁剪屏幕视图之外的图元。
+RS阶段获取发送给它的矢量信息（形状和图元）. 并通过在每个图元之间插入每个顶点的值将它们转换为像素。 它还处理裁剪. 基本上是裁剪屏幕视图之外的图元。
 
 上述文字也解释了什么叫渲染(*Rasterization*)
 
@@ -306,7 +306,7 @@ RS阶段获取发送给它的矢量信息（形状和图元），并通过在每个图元之间插入每个顶点的值
 
 #### OM: Output Merger
 
-此阶段获取像素片段和深度/模板缓冲区，并确定实际将哪些像素写入渲染目标
+此阶段获取像素片段和深度/模板缓冲区. 并确定实际将哪些像素写入渲染目标
 
 此阶段后, 将后置缓存映射到屏幕上
 
@@ -334,6 +334,17 @@ d3d是一个状态机, 只能保存当前的状态和设定, 因此对着色器的设置需要在运行时(每次渲
 * Format: 顶点组件格式
 * InputSlot: 输入槽, 可单线进入也可多线进入
 * AlignedByteOffset: 描述的元素的字节偏移量(?没看懂)
+  * 解释: 如下所示, 第一组占用32\*3 bits, 即4\*3 bytes, 因此第二组起始位置为0+12, 即偏移量为12
+    * 其中DXGI_FORMAT_R32G32B32_FLOAT, 相当于一个三元组格式, 三元组中每个元素占用32bits
+
+```c++
+D3D11_INPUT_ELEMENT_DESC layout[] =
+{
+	{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0},
+	{"COLOR",0,DXGI_FORMAT_R32G32B32A32_FLOAT,0,12,D3D11_INPUT_PER_VERTEX_DATA,0},//偏移量
+};
+```
+
 * InstanceDataStepRate: 实例化
 
 ```c++
@@ -442,7 +453,7 @@ typedef struct D3D11_BUFFER_DESC
 
 * pSysMem: 放入缓存的数据
 * SysMemPitch: 以字节为单位的从纹理中的一行到下一行的距离, 用于2D和3D的纹理
-* SysMemSlicePitch: 在3D纹理中，从一个深度级别到下一个深度级别的距离
+* SysMemSlicePitch: 在3D纹理中. 从一个深度级别到下一个深度级别的距离
 
 ```c++
 typedef struct D3D11_SUBRESOURCE_DATA
@@ -458,7 +469,7 @@ typedef struct D3D11_SUBRESOURCE_DATA
 用于创建缓存
 
 * pDesc: 指向缓存描述
-* pInitialData: 指向一个子资源数据结构的指针，该结构包含我们要放在这里的数据, 如果之后再添加数据则设为null
+* pInitialData: 指向一个子资源数据结构的指针. 该结构包含我们要放在这里的数据, 如果之后再添加数据则设为null
 * ppBuffer: 返回的缓存
 
 ```c++
@@ -538,7 +549,7 @@ void STDMETHODCALLTYPE IASetInputLayout(
 
 #### ID3D11DeviceContext::Draw()
 
-第一个参数是要绘制的顶点数，第二个参数是要开始绘制的顶点数组开始的偏移量。
+第一个参数是要绘制的顶点数. 第二个参数是要开始绘制的顶点数组开始的偏移量。
 
 ### 编译问题
 
@@ -567,4 +578,50 @@ void STDMETHODCALLTYPE IASetInputLayout(
 
 <http://blog.sina.com.cn/s/blog_5e83fce60102vd0r.html>
 
+#### 上传GitHub之后merge conflict(合并冲突)
+
+* 进入pr界面, resolve conflict.
+
+```github
+<<<<<<<<dev
+dev分支的修改
+========
+>>>>>>>>master
+```
+
+很显然, 我自己知道dev的分支是对的, 所以删掉master分支的部分以及注释, 保留内容如下, 之后就可以重新commit合并分支
+
+```github
+dev分支的修改
+```
+
+* 第二种解决方法 git rebase(变基)
+
+```git
+git rebase --skip 跳过冲突, 将分支起始点移动到主干的起始点
+```
+
+具体变基过程如下图所示
+
+![产生冲突][2]
+![变基][3]
+![回到主分支再次合并][4]
+
+## Tutorial4: Color!
+
+### 新知识
+
+* 代码中的注释应该尽可能的加上改动的时间以及原因, 而不仅仅是在文档中写出, 增加可读性(会太复杂吗?)
+
+### 编译问题
+
+* 与上一个tutorial的VS_Buffer 是 nullptr同样的问题
+  * 编译选项改成x86, 文件夹视图是默认x64编译
+  * 项目属性已添加了x64的源文件
+* 项目属性已添加了x64的源文件, 报无法打开d3dx11.lib
+  * 老老实实x86编译, Todo: x86与x64编译区别
+
 [1]:images/render-pipeline-stages.png
+[2]:images/basic-rebase-1.png
+[3]:images/basic-rebase-2.png
+[4]:images/basic-rebase-3.png
