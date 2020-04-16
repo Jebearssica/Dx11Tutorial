@@ -679,6 +679,58 @@ void DrawIndexed(
   * D3d11DeviceContent->IASetIndexBuffer(squareIndexBuffer, DXGI_FORMAT_R32_UINT, 0);
     * 编码格式是DXGI_FORMAT_R32_UINT不是DXGI_FORMAT_R32_FLOAT
 
+## Tutorial6: Depth
+
+创建深度/模板缓冲区(depth/stencil)和视图, 并且与OM阶段绑定
+
+### 新知识
+
+#### 深度/模板视图
+
+* 作用: 让管线的OM阶段检查渲染目标上所有像素细分的深度/模板值
+  * 如一个球后面有一个正方体, 到达OM阶段时, 将像素片段深度值与该位置中已经存在的像素片段进行比较
+    * 如果新的像素片段深度值小于已经存在的像素片段，则将丢弃已经存在的像素片段，并将新的像素片段保留在渲染目标上
+    * 如果先渲染球再渲染正方体, 由于球在前面, 深度值更小, 丢弃新的正方体的像素片段
+    * 所有几何图形绘制完毕后, 渲染目标剩余的像素就是最终显示到屏幕上的像素
+
+#### XXXXXX_DESC
+
+是一个定义的描述, 就像前面定义后置缓存一样
+
+### 类与函数
+
+#### ID3D11Device::CreateDepthStencilView()
+
+* pResource: 深度模板缓存描述
+* pDesc: 深度模具视图描述
+* ppDepthStencilView: 返回的深度模板缓存
+
+```c++
+HRESULT CreateDepthStencilView(
+  ID3D11Resource                      *pResource,
+  const D3D11_DEPTH_STENCIL_VIEW_DESC *pDesc,
+  ID3D11DepthStencilView              **ppDepthStencilView
+);
+```
+
+#### ID3D11DeviceContext::ClearDepthStencilView()
+
+* pDepthStencilView: 我们要清除的深度/模板视图
+* ClearFlags: 确定要清除的数据类型
+* Depth: 深度值
+  * 如果我们在此处设置0.0f，则不会在屏幕上绘制任何东西
+  * 如果我们在此处设置1.0f，则确保在屏幕上绘制所有对象
+* Stencil: 我们将模板设置为的值
+
+```c++
+void ClearDepthStencilView(
+  ID3D11DepthStencilView *pDepthStencilView,
+  UINT                   ClearFlags,
+  FLOAT                  Depth,
+  UINT8                  Stencil
+);
+```
+
 [1]:images/render-pipeline-stages.png
 [2]:images/basic-rebase-1.png
 [3]:images/basic-rebase-2.png
