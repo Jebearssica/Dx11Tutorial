@@ -4,7 +4,6 @@
 #pragma comment(lib, "d3dx10.lib")
 #pragma comment(lib, "DxErr.lib")
 
-#include <windows.h>
 #include <d3d11.h>
 #include <d3dx11.h>
 #include <d3dx10.h>
@@ -61,6 +60,10 @@ UINT numElements = ARRAYSIZE(layout);//保存布局数组的大小
 //矩形的顶点缓存与索引缓存
 ID3D11Buffer* squareIndexBuffer;
 ID3D11Buffer* squareVertexBuffer;
+
+//tutorial6: 加入深度/模板视图与深度/模板缓存
+ID3D11DepthStencilView* depthStencilView;
+ID3D11Texture2D* depthStencilBuffer;
 
 /* ** 全局变量 ** */
 
@@ -243,7 +246,7 @@ bool InitializeDirect3dApp(HINSTANCE hInstance)
 	//创建渲染目标
 	hr = D3d11Device->CreateRenderTargetView(BackBuffer, NULL, &RenderTargetView);
 	BackBuffer->Release();//后置缓存使用完毕,直接回收
-	//添加()错误抛出
+	//添加错误抛出
 	if (FAILED(hr))
 	{
 		MessageBox(NULL, DXGetErrorDescription(hr),
@@ -251,8 +254,38 @@ bool InitializeDirect3dApp(HINSTANCE hInstance)
 		return 0;
 	}
 
-	//渲染目标绑定
-	D3d11DeviceContent->OMSetRenderTargets(1, &RenderTargetView, NULL);
+	//tutorial6: 添加深度模板缓存描述及初始化
+	D3D11_TEXTURE2D_DESC depthStencilDesc;
+	depthStencilDesc.Width = WIDTH;
+	depthStencilDesc.Height = HEIGHT;
+	depthStencilDesc.MipLevels = 1;
+	depthStencilDesc.ArraySize = 1;
+	depthStencilDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+	depthStencilDesc.SampleDesc.Count = 1;
+	depthStencilDesc.SampleDesc.Quality = 0;
+	depthStencilDesc.Usage = D3D11_USAGE_DEFAULT;
+	depthStencilDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+	depthStencilDesc.CPUAccessFlags = 0;
+	depthStencilDesc.MiscFlags = 0;
+	//tutorial6: 创建深度模板缓存及视图
+	hr = D3d11Device->CreateTexture2D(&depthStencilDesc, NULL, &depthStencilBuffer);
+	//tutorial6: 错误抛出
+	if (FAILED(hr))
+	{
+		MessageBox(NULL, DXGetErrorDescription(hr),
+			TEXT("创建深度模板缓存"), MB_OK);
+		return 0;
+	}
+	hr = D3d11Device->CreateDepthStencilView(depthStencilBuffer, NULL, &depthStencilView);
+	if (FAILED(hr))
+	{
+		MessageBox(NULL, DXGetErrorDescription(hr),
+			TEXT("创建深度模板视图"), MB_OK);
+		return 0;
+	}
+
+	//渲染目标绑定, tutorial6: 增加深度模板缓存与OM阶段的绑定
+	D3d11DeviceContent->OMSetRenderTargets(1, &RenderTargetView, depthStencilView);
 }
 
 void RealeaseObjects()
@@ -268,6 +301,10 @@ void RealeaseObjects()
 	//tutorial5: 释放新增的正方形顶点缓存与索引缓存
 	squareIndexBuffer->Release();
 	squareVertexBuffer->Release();
+
+	//tutorial6: 释放深度模板视图与缓存
+	depthStencilView->Release();
+	depthStencilBuffer->Release();
 
 	//着色器释放
 	VS->Release();
@@ -367,6 +404,9 @@ bool InitializeScene()
 	viewport.TopLeftY = 0;
 	viewport.Width = WIDTH;
 	viewport.Height = HEIGHT;
+	//tutorial6: 添加深度值的区间(0,1)
+	viewport.MinDepth = 0.0f;
+	viewport.MaxDepth = 1.0f;
 	//视图设置, 绑定至光栅着色器
 	D3d11DeviceContent->RSSetViewports(1, &viewport);
 	return true;
@@ -392,6 +432,11 @@ void DrawScene()
 	//背景颜色清空
 	float bgColor[4] = { (0.0f, 0.0f, 0.0f, 0.0f) };//背景颜色初始化为黑
 	D3d11DeviceContent->ClearRenderTargetView(RenderTargetView, bgColor);//背景颜色清空
+
+	//tutorial6: 刷新深度模板视图
+	D3d11DeviceContent->ClearDepthStencilView(depthStencilView,
+		D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL,
+		1.0f, 0);
 
 	//tutorial5: 使用DrawIndexed()绘制正方形
 	D3d11DeviceContent->DrawIndexed(6, 0, 0);
