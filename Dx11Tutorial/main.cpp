@@ -65,6 +65,24 @@ ID3D11Buffer* squareVertexBuffer;
 ID3D11DepthStencilView* depthStencilView;
 ID3D11Texture2D* depthStencilBuffer;
 
+//tutorial7: 加入常量缓存, 存储在WVP矩阵, 逐对象刷新
+ID3D11Buffer* cbPerObjectBuffer;
+//tutorial7: 加入各个空间的矩阵定义
+XMMATRIX WVP;
+XMMATRIX worldSpace;
+XMMATRIX cameraView;
+XMMATRIX cameraProjection;
+//tutorial7: 加入向量定义
+XMVECTOR cameraPosition;
+XMVECTOR cameraTarget;
+XMVECTOR cameraUp;//摄像机的向上方向, 可见Note中的 视图空间(view space)
+//tutorial7: 增加常量缓存结构
+struct cbPerObject
+{
+	XMMATRIX WVP;
+};
+cbPerObject cbPerObj;
+
 /* ** 全局变量 ** */
 
 /* 函数声明 */
@@ -315,6 +333,9 @@ void RealeaseObjects()
 	//输入布局释放
 	vertexLayout->Release();
 
+	//tutorial7: 常量缓存释放
+	cbPerObjectBuffer->Release();
+
 }
 
 //在这里放置物体,贴图,加载模型,音乐
@@ -409,6 +430,36 @@ bool InitializeScene()
 	viewport.MaxDepth = 1.0f;
 	//视图设置, 绑定至光栅着色器
 	D3d11DeviceContent->RSSetViewports(1, &viewport);
+
+	//tutorial7: 创建常量缓存
+	D3D11_BUFFER_DESC cbBufferDesc;
+	ZeroMemory(&cbBufferDesc, sizeof(cbBufferDesc));
+	cbBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	cbBufferDesc.ByteWidth = sizeof(cbPerObject);
+	cbBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	cbBufferDesc.CPUAccessFlags = 0;
+	cbBufferDesc.MiscFlags = 0;
+	hr = D3d11Device->CreateBuffer(&cbBufferDesc, NULL, &cbPerObjectBuffer);
+
+	/* tutorial7: cbPerObjectBuffer创建测试单元开始 */
+	if (FAILED(hr))
+	{
+		MessageBox(NULL, DXGetErrorDescription(hr),
+			TEXT("创建常量缓存"), MB_OK);
+		return 0;
+	}
+	/* cbPerObjectBuffer创建测试单元结束 */
+
+	//tutorial7: 定义摄像头位置, 这个投影坐标还清楚
+	cameraPosition = XMVectorSet(0.0f, 0.0f, -0.5f, 0.0f);
+	cameraTarget = XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f);
+	cameraUp = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+	//tutorial7: 创建视图空间
+	cameraView = XMMatrixLookAtLH(cameraPosition, cameraTarget, cameraUp);
+	//tutorial7: 创建投影空间, 0.4*3.14没搞懂(?)
+	cameraProjection = XMMatrixPerspectiveFovLH(0.4f*3.14f, (float)WIDTH / HEIGHT, 1.0f, 1000.0f);
+
+
 	return true;
 }
 
@@ -437,6 +488,14 @@ void DrawScene()
 	D3d11DeviceContent->ClearDepthStencilView(depthStencilView,
 		D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL,
 		1.0f, 0);
+
+	//tutorial7: 定义世界空间与WVP矩阵
+	worldSpace = XMMatrixIdentity();//返回一个空矩阵
+	WVP = worldSpace * cameraView * cameraProjection;//一个空间转换公式
+	//tutorial7: 更新常量缓存
+	cbPerObj.WVP = XMMatrixTranspose(WVP);//矩阵转置
+	D3d11DeviceContent->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
+	D3d11DeviceContent->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
 
 	//tutorial5: 使用DrawIndexed()绘制正方形
 	D3d11DeviceContent->DrawIndexed(6, 0, 0);
