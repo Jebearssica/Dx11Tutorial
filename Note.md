@@ -815,8 +815,24 @@ cbuffer cbPerObject
 
 * 齐次坐标就是将一个原本是n维的向量用一个n+1维向量来表示
   * 比如(x,y,z,w)构成的三维坐标, 点 (x, y, z) 表示为 (xw, yw, zw, w), 且该点映射至平面上的点表示为 (xw, yw, zw)
+  * 这样使得无穷远处的点更好的被定义
+    * 如(1,2)被移至无穷远处, 在齐次坐标下表示为(1,2,1)->(1,2,0)
 
 <https://www.cnblogs.com/lonelyxmas/p/10811299.html>----3D空间转2D屏幕
+
+##### 透视除法(Perspective Division)
+
+W 分量是投影仪到屏幕的距离, 用于3D物体投影至2D屏幕上
+
+* 当缩放坐标的 W 为1时, 坐标不会增大或缩小, 保持原有的大小。所以, 当 W=1, 不会影响到 X, Y, Z 分量的值
+* W<1时, 3D物体会变小
+* W>1时, 3D物体会变大
+* W=0时, 代表无穷远处, 渲染成一个点
+* W<0时, 物体上下水平翻转
+
+**透视法只是在矩阵变换后, 将齐次坐标中的w分量转换为1的专用名词**
+
+也就是说, 最后转换"正确"后, 物体w分量一定为1
 
 #### dx11中向效果文件传输矩阵
 
@@ -850,6 +866,107 @@ XMMATRIX XMMatrixPerspectiveFovLH
 #### XMMatrixIdentity()
 
 返回一个空矩阵
+
+## Tutorial8: Transformations
+
+### 新知识
+
+#### World View Projection三者转换
+
+针对issue"Todo in tutorial7 #9"
+<https://blog.csdn.net/allenjiao/article/details/79557760>
+
+* code中的worldSpace矩阵, 实际上是用作将局部矩阵(Local)转换为world的矩阵
+* 同理view projection也一样
+
+#### 旋转(Rotation)
+
+分别围绕x, y, z三轴进行旋转
+
+```c++
+     [ 1,      0,     0, 0]
+Rx = [ 0, cos(r),sin(r), 0]
+     [ 0,-sin(r),cos(r), 0]
+     [ 0,      0,     0, 1]
+ 
+XMMATRIX XMMatrixRotationX(
+         FLOAT Angle    //Rotation angle in radians
+)
+
+     [cos(r), 0,-sin(r), 0]
+Ry = [   0,   1,   0,    0]
+     [sin(r), 0, cos(r), 0]
+     [   0,   0,   0,    1]
+ 
+XMMATRIX XMMatrixRotationY(
+         FLOAT Angle    //Rotation angle in radians
+)
+
+     [ cos(r),sin(r), 0, 0]
+Rz = [-sin(r),cos(r), 0, 0]
+     [      0,     0, 1, 0]
+     [      0,     0, 0, 1]
+    
+XMMATRIX XMMatrixRotationZ(
+         FLOAT Angle    //Rotation angle in radians
+)
+//综合xyz
+XMMATRIX XMMatrixRotationAxis(
+         XMVECTOR Axis,    //Vector describing the axis of rotation
+         FLOAT Angle    //Rotation angle in radians
+)
+```
+
+#### 平移转换
+
+```c++
+    [ 1, 0, 0, 0]
+T = [ 0, 1, 0, 0]
+    [ 0, 0, 1, 0]
+    [mx,my,mz, 1]
+
+XMMATRIX XMMatrixTranslation(
+         FLOAT OffsetX,    // Units translated on the x-axis
+         FLOAT OffsetY,    // Units translated on the y-axis
+         FLOAT OffsetZ    // Units translated on the z-axis
+)
+
+```
+
+#### 索引缓存长度与顶点缓存长度
+
+* 索引缓存需要通过片面数量\*3来得到总顶点数(包括重复顶点)
+* 顶点缓存直接通过总顶点数(不包含重复顶点)
+* 如一个正方体:
+  * 索引:12\*3, 顶点:8
+
+#### 世界矩阵的计算
+
+spaceWorld = Translation \* Rotation \* Scale
+
+### 函数与类
+
+#### XMMatrixScaling()
+
+返回一个缩放矩阵, 用于缩放物体
+
+```c++
+XMMATRIX XMMatrixScaling
+(
+    FLOAT ScaleX,    // x=axis scale
+    FLOAT ScaleY,     // y-axis scale
+    FLOAT ScaleZ    // z-axis scale
+)
+```
+
+### 编程问题
+
+#### 最后像两个正方形锥
+
+```c++
+vertexBufferDesc.ByteWidth = sizeof(Vertex) * 8;
+这个地方是八个顶点 而不是四个顶点
+```
 
 [1]:images/render-pipeline-stages.png
 [2]:images/basic-rebase-1.png
