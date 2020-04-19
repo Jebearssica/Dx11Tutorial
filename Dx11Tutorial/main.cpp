@@ -67,7 +67,7 @@ ID3D11Texture2D* depthStencilBuffer;
 
 //tutorial7: 加入常量缓存, 存储在WVP矩阵, 逐对象刷新
 ID3D11Buffer* cbPerObjectBuffer;
-//tutorial7: 加入各个空间的矩阵定义
+//tutorial7: 加入各个空间转换矩阵的定义
 XMMATRIX WVP;
 XMMATRIX worldSpace;
 XMMATRIX cameraView;
@@ -82,6 +82,15 @@ struct cbPerObject
 	XMMATRIX WVP;
 };
 cbPerObject cbPerObj;
+
+//tutorial8: 创建新的世界矩阵, 用于两个正方体
+XMMATRIX cube1World;
+XMMATRIX cube2World;
+//tutorial8: 用于旋转 缩放 平移
+XMMATRIX Rotation;
+XMMATRIX Scale;
+XMMATRIX Translation;
+float rot = 0.01f;//旋转角度
 
 /* ** 全局变量 ** */
 
@@ -353,30 +362,67 @@ bool InitializeScene()
 	D3d11DeviceContent->VSSetShader(VS, 0, 0);
 	D3d11DeviceContent->PSSetShader(PS, 0, 0);
 	//顶点集合创建, tutorial4: 增加RGBA颜色元素
-	//tutorial5: 顶点集合设置为四个, 绘制正方形
+	/*
+	tutorial5:
+		顶点集合设为四个, 绘制正方形
+	tutorial8:
+		顶点集合设为八个, 绘制正方体
+	*/
 	Vertex v[] =
 	{
-		Vertex(-0.5f, -0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 1.0f),
-		Vertex(-0.5f,  0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f),
-		Vertex(0.5f,  0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f),
-		Vertex(0.5f, -0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f),
+		Vertex(-1.0f, -1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 1.0f),
+		Vertex(-1.0f, +1.0f, -1.0f, 0.0f, 1.0f, 0.0f, 1.0f),
+		Vertex(+1.0f, +1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 1.0f),
+		Vertex(+1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 0.0f, 1.0f),
+		Vertex(-1.0f, -1.0f, +1.0f, 0.0f, 1.0f, 1.0f, 1.0f),
+		Vertex(-1.0f, +1.0f, +1.0f, 1.0f, 1.0f, 1.0f, 1.0f),
+		Vertex(+1.0f, +1.0f, +1.0f, 1.0f, 0.0f, 1.0f, 1.0f),
+		Vertex(+1.0f, -1.0f, +1.0f, 1.0f, 0.0f, 0.0f, 1.0f),
 	};
-	//tutorial5: 增加索引,点012构成一个三角形,023构成另一个, 因为布局通过三角形进行传输
-	DWORD indices[]=
-	{
-		0,1,2,
-		0,2,3,
+	/*
+	tutorial5:
+		增加索引,点012构成一个三角形,023构成另一个, 因为布局通过三角形进行传输
+	tutorial8:
+		增加索引, 构成正方体的六个面
+	*/
+	DWORD indices[] = {
+		// front face
+		0, 1, 2,
+		0, 2, 3,
+
+		// back face
+		4, 6, 5,
+		4, 7, 6,
+
+		// left face
+		4, 5, 1,
+		4, 1, 0,
+
+		// right face
+		3, 2, 6,
+		3, 6, 7,
+
+		// top face
+		1, 5, 6,
+		1, 6, 2,
+
+		// bottom face
+		4, 0, 3,
+		4, 3, 7
 	};
 
 	//tutorial5: 初始化索引缓存, 使用变量名做为初始化的参数, 而非类型名
 	D3D11_BUFFER_DESC indexBufferDesc;
 	ZeroMemory(&indexBufferDesc, sizeof(indexBufferDesc));
-	/*  tutorial5: 
+	/*  
+	tutorial5: 
 		索引缓存设置,每个矩形由两个片面构成
 		ByteWidth: 每个片面由三个顶点构成, 每个顶点占用indices数组一个DWORD长度
+	tutorial8:
+		更新索引缓存长度, 正方体, 6个矩形, 12个片面
 	*/
 	indexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
-	indexBufferDesc.ByteWidth = sizeof(DWORD) * 2 * 3;
+	indexBufferDesc.ByteWidth = sizeof(DWORD) * 12 * 3;
 	indexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	indexBufferDesc.CPUAccessFlags = 0;
 	indexBufferDesc.MiscFlags = 0;
@@ -392,11 +438,13 @@ bool InitializeScene()
 		初始化正方形顶点缓存, 将三角形顶点缓存换成正方形顶点缓存
 		使用变量名做为初始化的参数, 而非类型名
 		创建了新的顶点集后, 需要更新顶点缓存设置
+	tutorial8:
+		更新顶点缓存长度, 正方体, 8个顶点
 	*/
 	D3D11_BUFFER_DESC vertexBufferDesc;
 	ZeroMemory(&vertexBufferDesc, sizeof(vertexBufferDesc));
 	vertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
-	vertexBufferDesc.ByteWidth = sizeof(Vertex) * 4;
+	vertexBufferDesc.ByteWidth = sizeof(Vertex) * 8;
 	vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	vertexBufferDesc.CPUAccessFlags = 0;
 	vertexBufferDesc.MiscFlags = 0;
@@ -450,8 +498,13 @@ bool InitializeScene()
 	}
 	/* cbPerObjectBuffer创建测试单元结束 */
 
-	//tutorial7: 定义摄像头位置, 这个投影坐标还清楚
-	cameraPosition = XMVectorSet(0.0f, 0.0f, -0.5f, 0.0f);
+	/*
+	tutorial7:
+		定义摄像头位置, 这个投影坐标还清楚
+	tutorial8:
+		更新摄像头位置, 以获得更好的视觉角度和效果
+	*/
+	cameraPosition = XMVectorSet(0.0f, 3.0f, -8.0f, 0.0f);
 	cameraTarget = XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f);
 	cameraUp = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
 	//tutorial7: 创建视图空间
@@ -463,21 +516,48 @@ bool InitializeScene()
 	return true;
 }
 
+//tutorial8: 更新正方体围绕另一个自旋的正方体旋转
 void UpdateScene()
 {
-	////改变背景色,反正搞不懂rgb色彩调整
-	//red += colormodr * 0.00005f;
-	//green += colormodg * 0.00002f;
-	//blue += colormodb * 0.00001f;
+	//保证正方体旋转
+	rot += .0005f;
+	if (rot > 6.28)//大于2pi, 角度归零
+		rot = 0.0f;
+	//重置正方体1
+	cube1World = XMMatrixIdentity();
+	//设定正方体1的世界空间矩阵
+	XMVECTOR rotationAxis = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);//旋转方向(向量), y轴
+	Rotation = XMMatrixRotationAxis(rotationAxis, rot);//旋转矩阵
+	Translation = XMMatrixTranslation(0.0f, 0.0f, 4.0f);//平移矩阵
+	cube1World = Translation * Rotation;
+	//重置正方体2
+	cube2World = XMMatrixIdentity();
+	//设定正方体1的世界空间矩阵
+	Rotation = XMMatrixRotationAxis(rotationAxis, -rot);
+	Scale = XMMatrixScaling(1.3f, 1.3f, 1.3f);//缩放
+	cube2World = Rotation * Scale;
 
-	//if (red >= 1.0f || red <= 0.0f)
-	//	colormodr *= -1;
-	//if (green >= 1.0f || green <= 0.0f)
-	//	colormodg *= -1;
-	//if (blue >= 1.0f || blue <= 0.0f)
-	//	colormodb *= -1;
+	/*
+	旧内容
+	//改变背景色,反正搞不懂rgb色彩调整
+	red += colormodr * 0.00005f;
+	green += colormodg * 0.00002f;
+	blue += colormodb * 0.00001f;
+
+	if (red >= 1.0f || red <= 0.0f)
+		colormodr *= -1;
+	if (green >= 1.0f || green <= 0.0f)
+		colormodg *= -1;
+	if (blue >= 1.0f || blue <= 0.0f)
+		colormodb *= -1;
+	*/
+
 }
 
+/*
+tutorial8:
+	更新为正方体围绕另一个自旋的正方体旋转
+*/
 void DrawScene()
 {
 	//背景颜色清空
@@ -489,16 +569,30 @@ void DrawScene()
 		D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL,
 		1.0f, 0);
 
-	//tutorial7: 定义世界空间与WVP矩阵
-	worldSpace = XMMatrixIdentity();//返回一个空矩阵
-	WVP = worldSpace * cameraView * cameraProjection;//一个空间转换公式
+
+	//tutorial7: 定义世界空间转换矩阵与WVP矩阵
+	//tutorial8: 绘制cube1
+	//worldSpace = XMMatrixIdentity();//返回一个空矩阵, tutorial8: cube1World与cube2World代替
+	WVP = cube1World * cameraView * cameraProjection;//一个空间转换公式
 	//tutorial7: 更新常量缓存
 	cbPerObj.WVP = XMMatrixTranspose(WVP);//矩阵转置
 	D3d11DeviceContent->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
 	D3d11DeviceContent->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
 
-	//tutorial5: 使用DrawIndexed()绘制正方形
-	D3d11DeviceContent->DrawIndexed(6, 0, 0);
+	/*
+	tutorial5:
+		使用DrawIndexed()绘制正方形
+	tutorial8:
+		更新索引数量为12*3, 绘制cube1
+	*/
+	D3d11DeviceContent->DrawIndexed(36, 0, 0);
+
+	//tutorial8: 绘制cube2
+	WVP = cube2World * cameraView * cameraProjection;
+	cbPerObj.WVP = XMMatrixTranspose(WVP);//矩阵转置
+	D3d11DeviceContent->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
+	D3d11DeviceContent->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
+	D3d11DeviceContent->DrawIndexed(36, 0, 0);
 
 	//交换链将前置缓存映射到显示器, 即图像呈现
 	SwapChain->Present(0, 0);
