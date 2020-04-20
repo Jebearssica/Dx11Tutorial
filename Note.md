@@ -625,7 +625,24 @@ git rebase --skip 跳过冲突, 将分支起始点移动到主干的起始点
   * 编译选项改成x86, 文件夹视图是默认x64编译
   * 项目属性已添加了x64的源文件
 * 项目属性已添加了x64的源文件, 报无法打开d3dx11.lib
-  * 老老实实x86编译, Todo: x86与x64编译区别
+  * 老老实实x86编译
+
+#### x86与x64编译区别(解决issue)
+
+-Todo[x]: x86与x64编译区别
+
+<https://www.zhihu.com/question/303496588>
+<https://www.cnblogs.com/xietianjiao/p/11599117.html>
+
+* 定义:
+  * x86: 将程序集编译为由兼容 x86 的 32 位公共语言运行库运行。
+  * x64: 将程序集编译为由支持 AMD64 或 EM64T 指令集的计算机上的 64 位公共语言运行库运行。
+* 选择不同后的行为(在 64 位 Windows 操作系统上)
+  * 用 x86 编译的程序集将在 WOW64 下运行的 32 位 CLR 上执行
+  * 用 x64 编译的程序集将在 64 位 CLR 上执行
+* 设置正确编译不通过两个原因
+  * 不兼容, 你编译的程序没有对应架构的库, 或者有对应的库, 但是用法稍有区别
+  * 指针类型错误, 你程序对指针的加减, 或者指针强制转换有型别错误
 
 ## Tutorial5: Indices
 
@@ -967,6 +984,71 @@ XMMATRIX XMMatrixScaling
 vertexBufferDesc.ByteWidth = sizeof(Vertex) * 8;
 这个地方是八个顶点 而不是四个顶点
 ```
+
+## Tutorial9: Render States
+
+### 新知识
+
+#### 渲染状态(Render states)
+
+封装可用于配置Direct3d的设置, 以下三个是我们能够自定义的不同状态
+
+* ID3D11RasterizerState: 用于自定义管道的光栅化阶段
+* ID3D11BlendState: 用于混合(blending)
+* ID3D11DepthStencilState: 用于设置深度模板测试
+
+### 函数与类
+
+#### D3D11_RASTERIZER_DESC
+
+* FillMode: 
+  * 用于线框渲染的D3D11_FILL_WIREFRAME
+  * 用于实体渲染的D3D11_FILL_SOLID(默认)
+* CullMode: 
+  * D3D11_CULL_NONE来禁用剔除(不渲染三角形的另一侧)
+  * D3D10_CULL_FRONT进行正面剔除(这样就不会渲染正面)
+  * D3D11_CULL_BACK剔除背面(默认)
+* FrontCounterClockwise: 真意味着如果三角形顶点是顺时针呈现到相机, 那么这是正面
+* DepthBias: 指定添加到给定像素的深度值
+* DepthBiasClamp: 指定像素的最大深度偏差
+* SlopeScaledDepthBias: 指定给定像素斜率上的标量
+* DepthClipEnable: 启用或禁用根据与相机的距离的裁剪
+* ScissorEnable: 启用或禁用剪刀矩形剔除
+  * 剪刀矩形剔除(scissor-rectangle culling): 所有在活动剪刀矩形外的像素都被剔除(?)
+  * Todo: scissor-rectangle culling是个啥
+* MultisampleEnable: 多样本抗锯齿
+* AntialiasedLineEnable: 线性抗锯齿
+
+```c++
+typedef struct D3D11_RASTERIZER_DESC {
+  D3D11_FILL_MODE FillMode;
+  D3D11_CULL_MODE CullMode;
+  BOOL            FrontCounterClockwise;
+  INT             DepthBias;
+  FLOAT           DepthBiasClamp;
+  FLOAT           SlopeScaledDepthBias;
+  BOOL            DepthClipEnable;
+  BOOL            ScissorEnable;
+  BOOL            MultisampleEnable;
+  BOOL            AntialiasedLineEnable;
+} D3D11_RASTERIZER_DESC;
+```
+
+#### ID3D11Device::CreateRasterizerState()
+
+* pRasterizerDesc: 描述指针
+* ppRasterizerState: 返回的ID3D11RasterizerState客体
+
+```c++
+HRESULT CreateRasterizerState1(
+  const D3D11_RASTERIZER_DESC1 *pRasterizerDesc,
+  ID3D11RasterizerState1       **ppRasterizerState
+);
+```
+
+#### ID3D11DeviceContext::RSSetState()
+
+用于光栅状态与RS阶段绑定
 
 [1]:images/render-pipeline-stages.png
 [2]:images/basic-rebase-1.png
