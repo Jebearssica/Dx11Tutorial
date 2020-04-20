@@ -92,6 +92,9 @@ XMMATRIX Scale;
 XMMATRIX Translation;
 float rot = 0.01f;//旋转角度
 
+//tutorial9: 设置管道的RS阶段的呈现状态
+ID3D11RasterizerState* WireFrame;
+
 /* ** 全局变量 ** */
 
 /* 函数声明 */
@@ -345,6 +348,9 @@ void RealeaseObjects()
 	//tutorial7: 常量缓存释放
 	cbPerObjectBuffer->Release();
 
+	//tutorial9: 光栅状态释放
+	WireFrame->Release();
+
 }
 
 //在这里放置物体,贴图,加载模型,音乐
@@ -512,6 +518,21 @@ bool InitializeScene()
 	//tutorial7: 创建投影空间, 0.4*3.14没搞懂(?)
 	cameraProjection = XMMatrixPerspectiveFovLH(0.4f*3.14f, (float)WIDTH / HEIGHT, 1.0f, 1000.0f);
 
+	//tutorial9: 创建光栅状态以及与RS绑定
+	D3D11_RASTERIZER_DESC wireFrameDesc;
+	ZeroMemory(&wireFrameDesc, sizeof(wireFrameDesc));
+	wireFrameDesc.FillMode = D3D11_FILL_WIREFRAME;
+	wireFrameDesc.CullMode = D3D11_CULL_NONE;
+	hr = D3d11Device->CreateRasterizerState(&wireFrameDesc, &WireFrame);
+	/* tutorial9: WireFrame创建测试单元开始 */
+	if (FAILED(hr))
+	{
+		MessageBox(NULL, DXGetErrorDescription(hr),
+			TEXT("创建光栅状态"), MB_OK);
+		return 0;
+	}
+	/* WireFrame创建测试单元结束 */
+	D3d11DeviceContent->RSSetState(WireFrame);
 
 	return true;
 }
