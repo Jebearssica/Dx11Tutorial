@@ -215,7 +215,24 @@ void OMSetRenderTargets(
   * 类似于流水线进程, 一个阶段的输出就是下一个阶段的输入
 * dx11中管线的进程: 其中, 椭圆进程表示由用户创建, 矩形进程可通过direct3d 11 device context修改设定
 * ZeroMemory(), 将一段内存通过零填充, 相当于初始化指针(比给指针一个null要牛逼一点?)
-  * Todo: 比较一下
+  * -Todo[x]: <https://blog.csdn.net/trustnature/article/details/8085690>
+* ZeroMemory:
+  * 是微软的SDK提供的只能用于Windows系统
+  * 是一个宏, 用于把一段内存的内容置零,
+  * ZeroMemory会将结构中所有字节置0
+  * 一个struct有构造函数或虚函数时, ZeroMemory可以编译通过
+* memset:
+  * 属于C Run-time Library提供的可用于其他系统
+  * memset除了对内存进行清零操作, 还可以将内存置成别的字符
+* ={0}
+  * “={0}”只会将成员置0, 其中填充字节不变
+  * 而“={0}”会产生编译错误, 起到一定保护作用
+    * 因为对一个有虚函数的对象使用ZeroMemory时, 会将其虚函数的指针置0, 这是非常危险的(调用虚函数时, 空指针很可能引起程序崩溃)
+
+因此, 在windows平台下, 数组或纯结构使用ZeroMemory是安全的, 而类(class)就使用构造函数进行初始化, 不要调用ZeroMemory。
+
+另外, 如果一个类的结构中包含STL模板（Vector、List、Map等等）, 那么使用ZeroMemory对这个类的对象中进行清零操作也会引起一系列的崩溃问题（指针指向内存错误、迭代器越界访问等）。
+所以, 再次强烈建议：类(class)只使用构造函数进行初始化, 不要调用ZeroMemory进行清零操作。
 
 ```c++
 D3D11_BUFFER_DESC vertexBufferDesc;
@@ -708,7 +725,7 @@ void DrawIndexed(
 
 * 作用: 让管线的OM阶段检查渲染目标上所有像素细分的深度/模板值
   * 如一个球后面有一个正方体, 到达OM阶段时, 将像素片段深度值与该位置中已经存在的像素片段进行比较
-    * 如果新的像素片段深度值小于已经存在的像素片段，则将丢弃已经存在的像素片段，并将新的像素片段保留在渲染目标上
+    * 如果新的像素片段深度值小于已经存在的像素片段, 则将丢弃已经存在的像素片段, 并将新的像素片段保留在渲染目标上
     * 如果先渲染球再渲染正方体, 由于球在前面, 深度值更小, 丢弃新的正方体的像素片段
     * 所有几何图形绘制完毕后, 渲染目标剩余的像素就是最终显示到屏幕上的像素
 
@@ -737,8 +754,8 @@ HRESULT CreateDepthStencilView(
 * pDepthStencilView: 我们要清除的深度/模板视图
 * ClearFlags: 确定要清除的数据类型
 * Depth: 深度值
-  * 如果我们在此处设置0.0f，则不会在屏幕上绘制任何东西
-  * 如果我们在此处设置1.0f，则确保在屏幕上绘制所有对象
+  * 如果我们在此处设置0.0f, 则不会在屏幕上绘制任何东西
+  * 如果我们在此处设置1.0f, 则确保在屏幕上绘制所有对象
 * Stencil: 我们将模板设置为的值
 
 ```c++
@@ -1050,9 +1067,125 @@ HRESULT CreateRasterizerState1(
 
 用于光栅状态与RS阶段绑定
 
+## Tutorial10: Textures
+
+### 新知识
+
+#### DirectX3D中纹理投影坐标
+
+在Direct3D中, 我们使用2D(u,v)坐标系将纹理映射到对象上
+
+* u, v都是相对图像的位置, 属于(0,1)
+  * 即实际图像长度为256像素, 图像水平长度的一半也只有0.5
+
+![2D纹理的坐标][7]
+
+* 纹理坐标加倍, 则图像加倍
+
+![2D纹理的坐标加倍][8]
+
+#### 2D纹理与3D纹理
+
+* 2D纹理只有(u,v)两个值用于定位
+* 3D纹理在2D纹理的基础上增加一个w元素, 用于深度
+  * 相当于xyz坐标对应的uvw
+
+![uvw坐标示意图][9]
+
+#### 为每个片面顶点分离纹理坐标的原因
+
+如果不是这样, 那么一个正方体八个顶点进行纹理贴图, 只有两个相对的面能够正确渲染
+
+* 如顶+底或前+后或左+右, 无论如何总之不可能全部都正确渲染贴图
+
+#### mipmap
+
+在三维计算机图形的贴图渲染的一个常用的技术
+
+* Mipmap中每一个层级的小图都是主图的一个特定比例的缩小细节的复制品
+* 当贴图被缩小或者只需要从远距离观看时, mipmap就会转换到适当的层级
+* 因为mipmap贴图需要被读取的像素远少于普通贴图, 所以渲染的速度得到了提升, 而且操作的时间减少了, 因为mipmap的图片已经是做过抗锯齿处理的, 从而减少了实时渲染的负担, 放大和缩小也因为mipmap而变得更有效率
+* 一般来说, 每个层级都是上一个层级的四分之一大小(长宽各少一半)
+
+### 函数与类
+
+#### D3DX11CreateShaderResourceViewFromFile()
+
+从文件中加载纹理
+
+* pDevice: 指向我们d3d设备
+* pSrcFile: 文件路径
+  * 一般与exe在同一个文件夹下, 因此直接是文件名
+  * 不在同一个文件夹下, 要给出路径
+* pLoadInfo: 纹理如何被加载
+* pPump: 仅当我们需要多线程时才使用, 并在加载该文件时让程序继续运行
+* ppShaderResourceView: 指向着色器资源视图, 用于保存纹理数据
+* pHResult: 返回指针
+
+```c++
+HRESULT D3DX11CreateShaderResourceViewFromFile(
+  __in   ID3D11Device *pDevice,
+  __in   LPCTSTR pSrcFile,
+  __in   D3DX11_IMAGE_LOAD_INFO *pLoadInfo,
+  __in   ID3DX11ThreadPump *pPump,
+  __out  ID3D11ShaderResourceView **ppShaderResourceView,
+  __out  HRESULT *pHResult
+);
+```
+
+#### D3D11_SAMPLER_DESC
+
+采样器状态描述
+
+* Filter: 筛选方法
+* AddressU AddressV AddressW: uvw坐标
+* MipLODBias: mipmap level的偏移量
+  * 如计算出的level是3, 偏移量为2, 实际mipmap level为5
+* MaxAnisotropy: D3D11_FILTER_ANISOTROPIC或D3D11_FILTER_COMPARISON_ANISOTROPIC则使用钳位值
+  * 钳位: 是指将某点的电位限制在规定电位的措施
+* ComparisonFunc: 这会将采样的mipmap数据与此纹理的另一个mipmap采样数据进行比较
+* BorderColor: 如果对uwv任意一个设置了D3D11_TEXTURE_ADDRESS_BORDER, 那么这个就是贴图与边缘之间片面的颜色
+* MinLOD: mipmap level最低值
+* MaxLOD: mipmap level最高值
+
+```c++
+typedef struct D3D11_SAMPLER_DESC {
+  D3D11_FILTER               Filter;
+  D3D11_TEXTURE_ADDRESS_MODE AddressU;
+  D3D11_TEXTURE_ADDRESS_MODE AddressV;
+  D3D11_TEXTURE_ADDRESS_MODE AddressW;
+  FLOAT                      MipLODBias;
+  UINT                       MaxAnisotropy;
+  D3D11_COMPARISON_FUNC      ComparisonFunc;
+  FLOAT                      BorderColor[4];
+  FLOAT                      MinLOD;
+  FLOAT                      MaxLOD;
+} D3D11_SAMPLER_DESC;
+//default默认值
+Filter            MIN_MAG_MIP_LINEAR
+AddressU        Clamp
+AddressV        Clamp
+AddressW        Clamp
+MinLOD            -3.402823466e+38F (-FLT_MAX)
+MaxLOD            3.402823466e+38F (FLT_MAX)
+MipMapLODBias    0.0f
+MaxAnisotropy    16
+ComparisonFunc    Never
+BorderColor        float4(0.0f,0.0f,0.0f,0.0f)
+```
+
+### 编程问题
+
+#### 贴图不显示
+
+由于tutorial9中涉及到了光栅化, 其中有D3D11_RASTERIZER_DESC中描述的fillmode中有线框渲染, 改为实体渲染
+
 [1]:images/render-pipeline-stages.png
 [2]:images/basic-rebase-1.png
 [3]:images/basic-rebase-2.png
 [4]:images/basic-rebase-3.png
 [5]:images/projection-space.png
 [6]:images/FOV.jpg
+[7]:images/Texture2D-in-Dx.png
+[8]:images/Texture2D-double-in-Dx.png
+[9]:images/uvw.jpg
