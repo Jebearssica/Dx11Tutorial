@@ -30,4 +30,9 @@
       <Filter>资源文件</Filter>
     </None>
   </ItemGroup>
+  <ItemGroup>
+    <Image Include="yzz-sleep.jpg">
+      <Filter>资源文件</Filter>
+    </Image>
+  </ItemGroup>
 </Project>

@@ -38,21 +38,26 @@ ID3D11PixelShader* PS;//像素着色器
 ID3D10Blob* VS_Buffer;//顶点着色器缓存
 ID3D10Blob* PS_Buffer;//像素着色器缓存
 ID3D11InputLayout* vertexLayout;//顶点输入布局
+
+/*
+tutorial10:
+	删除颜色属性, 替换为纹理属性
+*/
 struct Vertex//顶点结构
 {
 	Vertex() {}
-	//tutorial4: 增加RGBA颜色元素
+	//tutorial4: 增加RGBA颜色元素, tutorial10: 替换为纹理属性
 	Vertex(float x, float y, float z,
-		float cr, float cg, float cb, float ca) : position(x, y, z), color(cr, cg, cb, ca) {}
+		float u, float v) : position(x, y, z), textureCoord(u, v) {}
 
 	XMFLOAT3 position;
-	XMFLOAT4 color;
+	XMFLOAT2 textureCoord;
 };
-//输入布局
+//输入布局, tutorial10: 根据顶点结构修改
 D3D11_INPUT_ELEMENT_DESC layout[] =
 {
 	{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0},
-	{"COLOR",0,DXGI_FORMAT_R32G32B32A32_FLOAT,0,12,D3D11_INPUT_PER_VERTEX_DATA,0},//偏移量
+	{"TEXCOORD",0,DXGI_FORMAT_R32G32_FLOAT,0,12,D3D11_INPUT_PER_VERTEX_DATA,0},//偏移量
 };
 UINT numElements = ARRAYSIZE(layout);//保存布局数组的大小
 
@@ -94,6 +99,10 @@ float rot = 0.01f;//旋转角度
 
 //tutorial9: 设置管道的RS阶段的呈现状态
 ID3D11RasterizerState* WireFrame;
+
+//tutorial10: 新增保存从文件中加载的纹理以及保存采样器状态信息的接口
+ID3D11ShaderResourceView* CubeTexture;
+ID3D11SamplerState* CubeTextureSampleState;
 
 /* ** 全局变量 ** */
 
@@ -170,7 +179,7 @@ bool InitializeWindow(HINSTANCE hInstance, int ShowWnd, int Width, int Height, b
 		MessageBox(NULL, "Error registering class", "ERROR", MB_OK | MB_ICONERROR);
 		return false;
 	}
-	hwnd = CreateWindowEx(NULL, WndClassName, "Window Title",
+	hwnd = CreateWindowEx(NULL, WndClassName, "Tutorial10-Texture",
 		WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
 		Width, Height, NULL, NULL, hInstance, NULL);
 	if (!hwnd)
@@ -373,55 +382,87 @@ bool InitializeScene()
 		顶点集合设为四个, 绘制正方形
 	tutorial8:
 		顶点集合设为八个, 绘制正方体
+	tutorial10:
+		由于顶点结构属性变换(纹理替换颜色), 此处的顶点集合创建也要变化
+		由于确保每个面贴图都要渲染正确, 因此一共6*4个顶点都要加入(即使有重复)
 	*/
 	Vertex v[] =
 	{
-		Vertex(-1.0f, -1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 1.0f),
-		Vertex(-1.0f, +1.0f, -1.0f, 0.0f, 1.0f, 0.0f, 1.0f),
-		Vertex(+1.0f, +1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 1.0f),
-		Vertex(+1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 0.0f, 1.0f),
-		Vertex(-1.0f, -1.0f, +1.0f, 0.0f, 1.0f, 1.0f, 1.0f),
-		Vertex(-1.0f, +1.0f, +1.0f, 1.0f, 1.0f, 1.0f, 1.0f),
-		Vertex(+1.0f, +1.0f, +1.0f, 1.0f, 0.0f, 1.0f, 1.0f),
-		Vertex(+1.0f, -1.0f, +1.0f, 1.0f, 0.0f, 0.0f, 1.0f),
+		// Front Face
+		Vertex(-1.0f, -1.0f, -1.0f, 0.0f, 1.0f),
+		Vertex(-1.0f,  1.0f, -1.0f, 0.0f, 0.0f),
+		Vertex(1.0f,  1.0f, -1.0f, 1.0f, 0.0f),
+		Vertex(1.0f, -1.0f, -1.0f, 1.0f, 1.0f),
+
+		// Back Face
+		Vertex(-1.0f, -1.0f, 1.0f, 1.0f, 1.0f),
+		Vertex(1.0f, -1.0f, 1.0f, 0.0f, 1.0f),
+		Vertex(1.0f,  1.0f, 1.0f, 0.0f, 0.0f),
+		Vertex(-1.0f,  1.0f, 1.0f, 1.0f, 0.0f),
+
+		// Top Face
+		Vertex(-1.0f, 1.0f, -1.0f, 0.0f, 1.0f),
+		Vertex(-1.0f, 1.0f,  1.0f, 0.0f, 0.0f),
+		Vertex(1.0f, 1.0f,  1.0f, 1.0f, 0.0f),
+		Vertex(1.0f, 1.0f, -1.0f, 1.0f, 1.0f),
+
+		// Bottom Face
+		Vertex(-1.0f, -1.0f, -1.0f, 1.0f, 1.0f),
+		Vertex(1.0f, -1.0f, -1.0f, 0.0f, 1.0f),
+		Vertex(1.0f, -1.0f,  1.0f, 0.0f, 0.0f),
+		Vertex(-1.0f, -1.0f,  1.0f, 1.0f, 0.0f),
+
+		// Left Face
+		Vertex(-1.0f, -1.0f,  1.0f, 0.0f, 1.0f),
+		Vertex(-1.0f,  1.0f,  1.0f, 0.0f, 0.0f),
+		Vertex(-1.0f,  1.0f, -1.0f, 1.0f, 0.0f),
+		Vertex(-1.0f, -1.0f, -1.0f, 1.0f, 1.0f),
+
+		// Right Face
+		Vertex(1.0f, -1.0f, -1.0f, 0.0f, 1.0f),
+		Vertex(1.0f,  1.0f, -1.0f, 0.0f, 0.0f),
+		Vertex(1.0f,  1.0f,  1.0f, 1.0f, 0.0f),
+		Vertex(1.0f, -1.0f,  1.0f, 1.0f, 1.0f),
 	};
 	/*
 	tutorial5:
 		增加索引,点012构成一个三角形,023构成另一个, 因为布局通过三角形进行传输
 	tutorial8:
 		增加索引, 构成正方体的六个面
+	tutorial10:
+		由于顶点集合变为24个, 索引也要变换
 	*/
 	DWORD indices[] = {
-		// front face
-		0, 1, 2,
-		0, 2, 3,
+		// Front Face
+		0,  1,  2,
+		0,  2,  3,
 
-		// back face
-		4, 6, 5,
-		4, 7, 6,
+		// Back Face
+		4,  5,  6,
+		4,  6,  7,
 
-		// left face
-		4, 5, 1,
-		4, 1, 0,
+		// Top Face
+		8,  9, 10,
+		8, 10, 11,
 
-		// right face
-		3, 2, 6,
-		3, 6, 7,
+		// Bottom Face
+		12, 13, 14,
+		12, 14, 15,
 
-		// top face
-		1, 5, 6,
-		1, 6, 2,
+		// Left Face
+		16, 17, 18,
+		16, 18, 19,
 
-		// bottom face
-		4, 0, 3,
-		4, 3, 7
+		// Right Face
+		20, 21, 22,
+		20, 22, 23
 	};
 
 	//tutorial5: 初始化索引缓存, 使用变量名做为初始化的参数, 而非类型名
 	D3D11_BUFFER_DESC indexBufferDesc;
 	ZeroMemory(&indexBufferDesc, sizeof(indexBufferDesc));
-	/*  
-	tutorial5: 
+	/*
+	tutorial5:
 		索引缓存设置,每个矩形由两个片面构成
 		ByteWidth: 每个片面由三个顶点构成, 每个顶点占用indices数组一个DWORD长度
 	tutorial8:
@@ -445,12 +486,14 @@ bool InitializeScene()
 		使用变量名做为初始化的参数, 而非类型名
 		创建了新的顶点集后, 需要更新顶点缓存设置
 	tutorial8:
-		更新顶点缓存长度, 正方体, 8个顶点
+		更新顶点缓存长度, 正方体, 8个顶点, 与前面的顶点集合数量相同
+	tutorial10:
+		更新顶点缓存长度, 正方体, 24个顶点, 与前面的顶点集合数量相同
 	*/
 	D3D11_BUFFER_DESC vertexBufferDesc;
 	ZeroMemory(&vertexBufferDesc, sizeof(vertexBufferDesc));
 	vertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
-	vertexBufferDesc.ByteWidth = sizeof(Vertex) * 8;
+	vertexBufferDesc.ByteWidth = sizeof(Vertex) * 24;
 	vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	vertexBufferDesc.CPUAccessFlags = 0;
 	vertexBufferDesc.MiscFlags = 0;
@@ -519,9 +562,10 @@ bool InitializeScene()
 	cameraProjection = XMMatrixPerspectiveFovLH(0.4f*3.14f, (float)WIDTH / HEIGHT, 1.0f, 1000.0f);
 
 	//tutorial9: 创建光栅状态以及与RS绑定
+	//tutorial10: 为了加载贴图将线框渲染改为实体渲染
 	D3D11_RASTERIZER_DESC wireFrameDesc;
 	ZeroMemory(&wireFrameDesc, sizeof(wireFrameDesc));
-	wireFrameDesc.FillMode = D3D11_FILL_WIREFRAME;
+	wireFrameDesc.FillMode = D3D11_FILL_SOLID;	//tutorial10: 为了加载贴图将线框渲染改为实体渲染
 	wireFrameDesc.CullMode = D3D11_CULL_NONE;
 	hr = D3d11Device->CreateRasterizerState(&wireFrameDesc, &WireFrame);
 	/* tutorial9: WireFrame创建测试单元开始 */
@@ -533,6 +577,37 @@ bool InitializeScene()
 	}
 	/* WireFrame创建测试单元结束 */
 	D3d11DeviceContent->RSSetState(WireFrame);
+	
+	//tutorial10: 从文件中加载纹理
+	hr = D3DX11CreateShaderResourceViewFromFile(D3d11Device, "yzz-sleep.jpg",
+		NULL, NULL, &CubeTexture, NULL);
+	/* tutorial9: CubeTexture创建测试单元开始 */
+	if (FAILED(hr))
+	{
+		MessageBox(NULL, DXGetErrorDescription(hr),
+			TEXT("从文件中加载纹理"), MB_OK);
+		return 0;
+	}
+	/* CubeTexture创建测试单元结束 */
+	//tutorial10: 采样器描述创建与初始化
+	D3D11_SAMPLER_DESC sampleDesc;
+	ZeroMemory(&sampleDesc, sizeof(sampleDesc));
+	sampleDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;//使用线性插值缩小, 放大, 和mip级采样
+	sampleDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;//在每个(u,v)整数结点平铺纹理, 例如u属于(0,3), 则平铺三次
+	sampleDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+	sampleDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+	sampleDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+	sampleDesc.MinLOD = 0;
+	sampleDesc.MaxLOD = D3D11_FLOAT32_MAX;
+	hr = D3d11Device->CreateSamplerState(&sampleDesc, &CubeTextureSampleState);
+	/* tutorial10: CubeTextureSampleState创建测试单元开始 */
+	if (FAILED(hr))
+	{
+		MessageBox(NULL, DXGetErrorDescription(hr),
+			TEXT("纹理采样状态"), MB_OK);
+		return 0;
+	}
+	/* CubeTextureSampleState创建测试单元结束 */
 
 	return true;
 }
@@ -590,7 +665,6 @@ void DrawScene()
 		D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL,
 		1.0f, 0);
 
-
 	//tutorial7: 定义世界空间转换矩阵与WVP矩阵
 	//tutorial8: 绘制cube1
 	//worldSpace = XMMatrixIdentity();//返回一个空矩阵, tutorial8: cube1World与cube2World代替
@@ -599,6 +673,10 @@ void DrawScene()
 	cbPerObj.WVP = XMMatrixTranspose(WVP);//矩阵转置
 	D3d11DeviceContent->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
 	D3d11DeviceContent->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
+
+	//tutorial10: 向像素着色器发送纹理信息与纹理采样状态信息
+	D3d11DeviceContent->PSSetShaderResources(0, 1, &CubeTexture);
+	D3d11DeviceContent->PSSetSamplers(0, 1, &CubeTextureSampleState);
 
 	/*
 	tutorial5:
@@ -613,6 +691,10 @@ void DrawScene()
 	cbPerObj.WVP = XMMatrixTranspose(WVP);//矩阵转置
 	D3d11DeviceContent->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
 	D3d11DeviceContent->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
+	//tutorial10: 向像素着色器发送纹理信息与纹理采样状态信息
+	D3d11DeviceContent->PSSetShaderResources(0, 1, &CubeTexture);
+	D3d11DeviceContent->PSSetSamplers(0, 1, &CubeTextureSampleState);
+
 	D3d11DeviceContent->DrawIndexed(36, 0, 0);
 
 	//交换链将前置缓存映射到显示器, 即图像呈现
