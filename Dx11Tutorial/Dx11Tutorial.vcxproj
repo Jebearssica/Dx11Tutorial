@@ -158,8 +158,8 @@
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\Note.md" />
     <None Include="..\README.md" />
-    <None Include="Note.md" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Effects.fx">
