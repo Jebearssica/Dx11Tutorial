@@ -109,6 +109,9 @@ ID3D11BlendState* Transparency;
 ID3D11RasterizerState* CCWcullMode;//counter clockwise 逆时针
 ID3D11RasterizerState* CWcullMode;//clockwise 顺时针
 
+//turorial12: 新增一个新的渲染状态, 用于看见正方体的后面部分
+ID3D11RasterizerState* noCull;
+
 /* ** 全局变量 ** */
 
 /* 函数声明 */
@@ -370,6 +373,9 @@ void RealeaseObjects()
     CCWcullMode->Release();
     CWcullMode->Release();
 
+    //turorial12: 渲染状态释放
+    noCull->Release();
+
 }
 
 //在这里放置物体,贴图,加载模型,音乐
@@ -589,7 +595,8 @@ bool InitializeScene()
     D3d11DeviceContent->RSSetState(WireFrame);
 
     //tutorial10: 从文件中加载纹理
-    hr = D3DX11CreateShaderResourceViewFromFile(D3d11Device, "yzz-sleep.jpg",
+    //tutorial12: 换成一个更适合看出裁切效果的png图, 失败了
+    hr = D3DX11CreateShaderResourceViewFromFile(D3d11Device, "cube-png.png",
         NULL, NULL, &CubeTexture, NULL);
     /* tutorial9: CubeTexture创建测试单元开始 */
     if (FAILED(hr))
@@ -665,6 +672,13 @@ bool InitializeScene()
     }
     /* CWcullMode创建测试单元结束 */
 
+    //tutorial12: 取消背面剔除
+    D3D11_RASTERIZER_DESC rasterDesc;
+    ZeroMemory(&rasterDesc, sizeof(rasterDesc));
+    rasterDesc.FillMode = D3D11_FILL_SOLID;
+    rasterDesc.CullMode = D3D11_CULL_NONE;
+    D3d11Device->CreateRasterizerState(&rasterDesc, &noCull);
+
     return true;
 }
 
@@ -721,37 +735,44 @@ void DrawScene()
         D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL,
         1.0f, 0);
 
-    //tutorial11: 新增混合因子, 新增混合状态与OM绑定
-    float blendFactor[] = { 0.75f,0.75f,0.75f,1.0f };//混合因子RGB中25%透明
-    D3d11DeviceContent->OMSetBlendState(0, 0, 0xffffffff);//禁用混合状态用于绘制不透明对象
-    /*    渲染不透明对象代码   */
-    D3d11DeviceContent->OMSetBlendState(Transparency, blendFactor, 0xffffffff);//启用混合状态用于绘制透明对象
-    /*    渲染透明对象代码   */
-    /*
-    tutorial11:
-        新增判断两个正方体的位置关系, 从而使得渲染关系不会出错, 从而导致融合出问题(先渲染远离摄像机的)
-    */
-    XMVECTOR cubePosition = XMVectorZero();//向量清零
-    //获取正方体1位置与摄像机位置的距离
-    cubePosition = XMVector3TransformCoord(cubePosition, cube1World);//通过正方体1的世界矩阵获得位置
-    float distX = XMVectorGetX(cubePosition) - XMVectorGetX(cameraPosition);
-    float distY = XMVectorGetY(cubePosition) - XMVectorGetY(cameraPosition);
-    float distZ = XMVectorGetZ(cubePosition) - XMVectorGetZ(cameraPosition);
-    float cube1Distance = distX * distX + distY * distY + distZ * distZ;//只是比较, 无需sqrt得到正确的值, 降低性能损失
-    cubePosition = XMVectorZero();//向量清零
-    //获取正方体2位置与摄像机位置的距离
-    cubePosition = XMVector3TransformCoord(cubePosition, cube2World);//通过正方体2的世界矩阵获得位置
-    distX = XMVectorGetX(cubePosition) - XMVectorGetX(cameraPosition);
-    distY = XMVectorGetY(cubePosition) - XMVectorGetY(cameraPosition);
-    distZ = XMVectorGetZ(cubePosition) - XMVectorGetZ(cameraPosition);
-    float cube2Distance = distX * distX + distY * distY + distZ * distZ;
-    //由于两个正方体完全相同, 因此想要获得离得更远的世界矩阵, 比较后, 直接两者互换即可
-    if (cube1Distance < cube2Distance)
-    {
-        XMMATRIX tempMatrix = cube1World;
-        cube1World = cube2World;
-        cube2World = tempMatrix;//这样cube1World就是离得更远更先渲染的正方体
-    }
+    //tutorial12: 先默认渲染, 然后无背面剔除渲染
+    D3d11DeviceContent->RSSetState(NULL);//null为默认
+    D3d11DeviceContent->RSSetState(noCull);
+
+    //tutorial12: 产生裁切效果因此禁用混合效果
+    ////tutorial11: 新增混合因子, 新增混合状态与OM绑定
+    //float blendFactor[] = { 0.75f,0.75f,0.75f,1.0f };//混合因子RGB中25%透明
+    //D3d11DeviceContent->OMSetBlendState(0, 0, 0xffffffff);//禁用混合状态用于绘制不透明对象
+    ///*    渲染不透明对象代码   */
+    //D3d11DeviceContent->OMSetBlendState(Transparency, blendFactor, 0xffffffff);//启用混合状态用于绘制透明对象
+    ///*    渲染透明对象代码   */
+
+    ///*
+    //tutorial11:
+    //    新增判断两个正方体的位置关系, 从而使得渲染关系不会出错, 从而导致融合出问题(先渲染远离摄像机的)
+    //*/
+    //XMVECTOR cubePosition = XMVectorZero();//向量清零
+    ////获取正方体1位置与摄像机位置的距离
+    //cubePosition = XMVector3TransformCoord(cubePosition, cube1World);//通过正方体1的世界矩阵获得位置
+    //float distX = XMVectorGetX(cubePosition) - XMVectorGetX(cameraPosition);
+    //float distY = XMVectorGetY(cubePosition) - XMVectorGetY(cameraPosition);
+    //float distZ = XMVectorGetZ(cubePosition) - XMVectorGetZ(cameraPosition);
+    //float cube1Distance = distX * distX + distY * distY + distZ * distZ;//只是比较, 无需sqrt得到正确的值, 降低性能损失
+    //cubePosition = XMVectorZero();//向量清零
+    ////获取正方体2位置与摄像机位置的距离
+    //cubePosition = XMVector3TransformCoord(cubePosition, cube2World);//通过正方体2的世界矩阵获得位置
+    //distX = XMVectorGetX(cubePosition) - XMVectorGetX(cameraPosition);
+    //distY = XMVectorGetY(cubePosition) - XMVectorGetY(cameraPosition);
+    //distZ = XMVectorGetZ(cubePosition) - XMVectorGetZ(cameraPosition);
+    //float cube2Distance = distX * distX + distY * distY + distZ * distZ;
+    ////由于两个正方体完全相同, 因此想要获得离得更远的世界矩阵, 比较后, 直接两者互换即可
+    //if (cube1Distance < cube2Distance)
+    //{
+    //    XMMATRIX tempMatrix = cube1World;
+    //    cube1World = cube2World;
+    //    cube2World = tempMatrix;//这样cube1World就是离得更远更先渲染的正方体
+    //}
+    /*    tutorial12: 禁用混合效果结束   */
 
     //tutorial7: 定义世界空间转换矩阵与WVP矩阵
     //tutorial8: 绘制cube1
@@ -767,7 +788,8 @@ void DrawScene()
     D3d11DeviceContent->PSSetSamplers(0, 1, &CubeTextureSampleState);
 
     //tutorial11: 先逆时针剔除, 以获得正面
-    D3d11DeviceContent->RSSetState(CCWcullMode);
+    //tutorial12: 禁用混合效果
+    //D3d11DeviceContent->RSSetState(CCWcullMode);
 
     /*
     tutorial5:
@@ -778,8 +800,9 @@ void DrawScene()
     D3d11DeviceContent->DrawIndexed(36, 0, 0);
 
     //tutorial11: 顺时针剔除, 以获得背面
-    D3d11DeviceContent->RSSetState(CWcullMode);
-    D3d11DeviceContent->DrawIndexed(36, 0, 0);
+    //tutorial12: 禁用混合效果
+    //D3d11DeviceContent->RSSetState(CWcullMode);
+    //D3d11DeviceContent->DrawIndexed(36, 0, 0);
 
     //tutorial8: 绘制cube2
     WVP = cube2World * cameraView * cameraProjection;
@@ -790,13 +813,14 @@ void DrawScene()
     D3d11DeviceContent->PSSetShaderResources(0, 1, &CubeTexture);
     D3d11DeviceContent->PSSetSamplers(0, 1, &CubeTextureSampleState);
 
+    //tutorial12: 禁用混合效果
     //tutorial11: 先逆时针剔除, 以获得正面
-    D3d11DeviceContent->RSSetState(CCWcullMode);
+    //D3d11DeviceContent->RSSetState(CCWcullMode);
 
-    D3d11DeviceContent->DrawIndexed(36, 0, 0);
+    //D3d11DeviceContent->DrawIndexed(36, 0, 0);
 
-    //tutorial11: 先逆时针剔除, 以获得正面
-    D3d11DeviceContent->RSSetState(CWcullMode);
+    ////tutorial11: 先逆时针剔除, 以获得正面
+    //D3d11DeviceContent->RSSetState(CWcullMode);
     D3d11DeviceContent->DrawIndexed(36, 0, 0);
 
     //交换链将前置缓存映射到显示器, 即图像呈现

@@ -1369,6 +1369,25 @@ typedef enum D3D11_COLOR_WRITE_ENABLE {
 } D3D11_COLOR_WRITE_ENABLE;
 ```
 
+## Tutorial12: Pixel Clipping
+
+实在找不到一个好的PNG图片来展现效果, 失败了
+
+### 新知识
+
+#### 裁剪(Clipping)
+
+通常用于裁切在视图之外的巨型物体(微型物体裁切消耗的GPU资源可能超过画出之后再丢弃)
+
+裁切像素之后, 就会禁止像素着色器继续处理, 并且不会将数据传递给渲染目标视图和深度模板缓冲
+
+具体的裁切情况如下列网址:
+<https://blog.csdn.net/l773575310/article/details/78433706>
+
+#### 裁剪与剔除(Clipping & Culling)
+
+<https://zhuanlan.zhihu.com/p/97371838>
+
 [1]:images/render-pipeline-stages.png
 [2]:images/basic-rebase-1.png
 [3]:images/basic-rebase-2.png
