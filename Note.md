@@ -1388,6 +1388,10 @@ typedef enum D3D11_COLOR_WRITE_ENABLE {
 
 <https://zhuanlan.zhihu.com/p/97371838>
 
+## Tutorial13: Simple Font
+
+暂时暂停更新, 先做毕设
+
 [1]:images/render-pipeline-stages.png
 [2]:images/basic-rebase-1.png
 [3]:images/basic-rebase-2.png
