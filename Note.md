@@ -132,7 +132,7 @@ typedef struct DXGI_SWAP_CHAIN_DESC {
   * DriverType: 描述d3d如何被驱动
     * D3D_DRIVER_TYPE_HARDWARE: GPU驱动
   * Software: 指向软件光栅化的dll文件句柄
-  * pFeatureLevels: 指针Dx版本
+  * pFeatureLevels: 指针, Dx编译特色等等
   * FeatureLevels: 上述指针数量
   * ppSwapChain: IDXGISwapChain接口指针
   * pFeatureLevel: 保持可用的最高功能级别
@@ -801,7 +801,7 @@ void ClearDepthStencilView(
 #### 投影空间(Projection space)
 
 * 投影空间定义了3D场景中从相机的角度可以看到对象的区域: 对象进入则渲染, 对象退出则抛弃
-* 由六个平面定义, 即近平面,、远平面、顶、左、底和右平面
+* 由六个平面定义, 即近平面、远平面、顶、左、底和右平面
   * 将“投影空间”渲染为几何图形, 它将看起来像是一个顶端被切掉的金字塔。 金字塔的尖端将是相机的位置, 尖端被切除的位置将是近z平面, 金字塔的基础将是远z平面。
   * 近平面和远平面由浮点值定义, 其他四个平面由长宽比和FOV（以弧度表示的视场）定义。
 
@@ -1286,7 +1286,7 @@ Fragment Shader执行之后——Alpha To Coverage就在此时进行转换
 * Alpha Test: 是一种非0即1的强制方法, 只要一个像素的alpha不满足条件, 那么它就会被fragment shader舍弃
   * 结果要么完全透明, 即看不到, 要么完全不透明
 * Alpha Blending: 它使用当前fragment的alpha作为混合因子, 来混合之前写入到缓存中颜色值
-  * 注意: 我们需要保证物体的渲染顺序是从后往前，并且关闭该半透明对象的ZWrite, 如果不关闭ZWrite, 那么在进行深度检测的时候,
+  * 注意: 我们需要保证物体的渲染顺序是从后往前, 并且关闭该半透明对象的ZWrite, 如果不关闭ZWrite, 那么在进行深度检测的时候,
   它背后的物体本来是可以透过它被我们看到的, 但由于深度检测时大于它的深度就被剔除了, 从而我们就看不到它后面的物体了
 
 #### 顺时针剔除与逆时针剔除(Counter clockwise culling)
@@ -1390,7 +1390,236 @@ typedef enum D3D11_COLOR_WRITE_ENABLE {
 
 ## Tutorial13: Simple Font
 
-暂时暂停更新, 先做毕设
+注意与之前的Blending结合, 且本章节是全网中少有的, 阐述如何通过Dx11渲染出字体
+
+本章节将要实现, 通过在D3D11中使用D2D进行字体渲染
+
+### 新知识
+
+#### Direct2D与缓存格式
+
+Direct2D只支持BGRA格式, 而非之前的RGBA
+
+#### 表面共享(Surface Sharing)
+
+通过Direct3D Device 使用Direct2D来渲染一个表面, 并将这个共享表面映射到覆盖整个屏幕空间的正方形上
+
+#### D3D10设备访问D3D11的纹理
+
+由于不同D3D设备不能直接互相通信, 需要使用DXGI接口, 因此我们需要进行以下步骤
+
+* 创建IDXGIResource, 其中的指针指向D3D11纹理
+* 调用QueryInterface获得D3D11纹理中的IDXGIResource
+* 创建一个句柄使得D3D10设备可以访问
+* 通过IDXGIResource中的GetSharedHandle获得最终D3D11纹理的句柄
+
+##### DXGI(DirectX Graphics Infrastructure)
+
+是windows系统中用户模式下最底层的图形设备接口, 不管是Direct 2D 还是 Direct 3D都基于其上. 因此, DXGI 直接与硬件驱动打交道
+
+##### 表面共享同步
+
+* 创建转接器(Adapter)
+* 创建D3D设备, 并与转接器绑定
+* 绑定正确的驱动类型
+* 绑定D3D11_CREATE_DEVICE_BGRA_SUPPORT数据类型
+* 设置特性等级(feature level): D3D10_FEATURE_LEVEL_9_3
+
+##### 共享纹理
+
+* 设置正确的纹理格式: DXGI_FORMAT_B8G8R8A8_UNORM(2D纹理只支持BGRA格式)
+* 设置MiscFlags(确定资源选项): D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX, 使得两个D3D设备能够共享该纹理
+
+##### 带键信号量(Keyed Mutex)
+
+对象: IDXGIKeyedMutex
+
+通过IDXGIKeyedMutex\::AcquireSync与IDXGIKeyedMutex\::ReleaseSync进行信号量的PV操作
+
+* 其中第一个变量都是key代表含义如下:
+  * 第一次唤醒(acquire)必须key为0
+  * 如果你在key=0唤醒,key=1释放, 那么下一个必须在1唤醒
+  * 常常用于同步: 如果你想要ABC三个顺序, 那么设置如下
+    * A acquire 0, release 1
+    * B acquire 1. release 2
+    * C acquire 2, release 0
+  
+<https://bobobobo.wordpress.com/2011/08/07/what-is-the-key-parameter-to-idxgikeyedmutexacquiresync-used-for/>
+
+想要通过多个D3D设备访问, 需要通过IDXGIResource这个共享资源, 并通过IDXGISurface1对象访问共享资源的句柄
+
+##### 共享资源(IDXGIResource)
+
+通过该资源的句柄可以创建共享表面
+
+##### 共享表面(IDXGISurface1)
+
+通过IDXGISurface1存储共享资源的指针
+
+#### DPI(Dots Per Inch)
+
+每一英寸长度输出点(图形学里就是像素点)
+
+#### 类型转换
+
+<https://www.cnblogs.com/evenleee/p/10382335.html>
+
+##### static_cast<类型说明符>(表达式）
+
+* 类似C风格的强制转换, 进行无条件转换, 静态类型转换
+* 基本数据类型转换, enum, struct, int, char, float等
+* static_cast不能进行无关类型（如非基类和子类）指针之间的转换
+* 把任何类型的表达式转换成void类型
+
+```c++
+double d = static_cast<double>(n);     //基本类型转换
+int *pn = &n;
+double *d = static_cast<double*>(&n);  //无关类型转换, 编译错误
+void *p = static_cast<void*>(pn);
+```
+
+##### dynamic_cast<类型说明符>(表达式）
+
+条件转换, 动态类型转换, 运行时检查类型安全（转换失败返回NULL）
+
+* 必须有虚函数, 保证多态性
+* 相同基类不同子类之间的交叉转换, 但结果返回NULL
+
+```c++
+class Base {
+public:
+    int _i;
+    virtual void foo() {}; //基类必须有虚函数。保持多态特性才能使用dynamic_cast
+};
+
+class Sub : public Base {
+public:
+    char *_name[100];
+    void Bar() {};
+};
+Base* pb = new Sub();
+Sub* ps1 = static_cast<Sub*>(pb);  //子类->父类，静态类型转换，正确但不推荐(非基类)
+Sub* ps2 = dynamic_cast<Sub*>(pb); //子类->父类，动态类型转换，正确
+
+Base* pb2 = new Base();
+Sub* ps21 = static_cast<Sub*>(pb2); //父类->子类，静态类型转换，危险！访问子类_name成员越界
+Sub* ps22 = dynamic_cast<Sub*>(pb2);//父类->子类，动态类型转换，安全，但结果为NULL
+```
+
+##### const_cast<类型说明符>(表达式）
+
+去掉类型的const或volatile属性
+
+```c++
+const T a;
+//a.i = 10;  //直接修改const类型, 编译错误
+T &b = const_cast<T&>(a);
+b.i = 10;
+```
+
+##### reinterpret_cast<类型说明符>(表达式）
+
+<https://zhuanlan.zhihu.com/p/33040213>
+
+不会改变括号中运算对象的值, 而是对该对象从位模式上进行重新解释
+
+* 转换类型必须是指针
+* 在比特级别上进行转换, 可以把一个指针转换成一个整数, 也可以把一个整数转换成一个指针（先把一个指针转换成一个整数, 在把该整数转换成原类型的指针, 还可以得到原先的指针值）, 但不能将非32bit的实例转成指针
+* 最普通的用途就是在函数指针类型之间进行转换
+
+举个例子: 即, 原本是类型A的地址0xAA 变成了 类型B的地址0xAA
+
+```c++
+int num = 0x00636261;//用16进制表示32位int，0x61是字符'a'的ASCII码
+int * pnum = &num;//pnum的值为内存地址, 指向的内容为636261
+char * pstr = reinterpret_cast<char *>(pnum);//pstr的值为相同的内存地址, 指向的内容为0x00636261对应的字符abc
+```
+
+### 函数与类
+
+#### D2D1_RENDER_TARGET_PROPERTIES
+
+* type: 硬渲染或软渲染选择
+* pixelFormat: 像素格式
+* dpiX: X轴方向上的DPI
+* dpiY: Y轴方向上的DPI
+* usage: msdn远程指定渲染目标
+* minLevel: 设置硬件渲染最低等级
+  * 低于这个等级使用软件渲染, 或者硬件渲染出问题, 则使用软件渲染
+  * 本次渲染不设置, 因为创建DXGI渲染目标
+
+```c++
+struct D2D1_RENDER_TARGET_PROPERTIES {
+  D2D1_RENDER_TARGET_TYPE  type;
+  D2D1_PIXEL_FORMAT        pixelFormat;
+  FLOAT                    dpiX;
+  FLOAT                    dpiY;
+  D2D1_RENDER_TARGET_USAGE usage;
+  D2D1_FEATURE_LEVEL       minLevel;
+};
+```
+
+#### CreateTextFormat()
+
+* fontFamilyName: 字体系列的字符串, 本次使用"Script"
+* fontCollection: 指向字体集合对象的指针, 从中获取字体, 使用null使用系统字体
+* fontWeight: 值越大越粗体
+* fontStyle: DWRITE_FONT_STYLE枚举类型(字体类型)
+* fontStretch: 字符的宽度(0~9)
+* fontSize: 字体大小(与设备无关, 相当于word里的字号大小)
+* localeName: 指定字体语言
+* textFormat: 返回的一个存储字体格式的IDWriteTextFormat对象
+
+```c++
+HRESULT CreateTextFormat(
+  [in]   const WCHAR * fontFamilyName,
+         IDWriteFontCollection * fontCollection,
+         DWRITE_FONT_WEIGHT  fontWeight,
+         DWRITE_FONT_STYLE  fontStyle,
+         DWRITE_FONT_STRETCH  fontStretch,
+         FLOAT  fontSize,
+  [in]   const WCHAR * localeName,
+  [out]  IDWriteTextFormat ** textFormat
+)
+```
+
+#### DrawText()
+
+用于绘制文字
+
+* string: 绘制的文字
+* stringLength: 长度
+* textFormat: 格式
+* layoutRect: 文字框
+* defaultForegroundBrush: 笔刷
+* options: 文本是否对齐像素 超出文字框是否裁切
+* measuringMode: 
+
+TODO: measuringMode究竟是个啥 glyph metrics进行文字测量有啥用
+
+```c++
+void DrawText(
+  [in]   WCHAR *string,
+         UINT stringLength,
+  [in]   IDWriteTextFormat *textFormat,
+  [ref]  const D2D1_RECT_F &layoutRect,
+  [in]   ID2D1Brush *defaultForegroundBrush,
+         D2D1_DRAW_TEXT_OPTIONS options = D2D1_DRAW_TEXT_OPTIONS_NONE,
+         DWRITE_MEASURING_MODE measuringMode = DWRITE_MEASURING_MODE_NATURAL
+);
+```
+
+### 编程问题
+
+#### **KeyedMutexD3d10** 是 nullptr
+
+在创建指针的过程中, 通常使用这样的函数创造
+
+```c++
+//错误(void**)后需要的是指针的地址,即&KeyedMutexD3d10, KeyedMutexD3d10本身就是个指针, 因此编译不会出错, 但是运行会报错
+hr = SharedSurface10->QueryInterface(__uuidof(IDXGIKeyedMutex), (void**)KeyedMutexD3d10);
+```
+
 
 [1]:images/render-pipeline-stages.png
 [2]:images/basic-rebase-1.png
