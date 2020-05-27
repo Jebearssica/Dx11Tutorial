@@ -3,16 +3,27 @@
 #pragma comment(lib, "d3dx11.lib")
 #pragma comment(lib, "d3dx10.lib")
 #pragma comment(lib, "DxErr.lib")
+//tutorial13: 新增库以满足DX10中进行D2D文字渲染
+#pragma comment (lib, "D3D10_1.lib")
+#pragma comment (lib, "DXGI.lib")
+#pragma comment (lib, "D2D1.lib")
+#pragma comment (lib, "dwrite.lib")
 
 #include <d3d11.h>
 #include <d3dx11.h>
 #include <d3dx10.h>
 #include <xnamath.h>
-#include<DxErr.h>//用于错误抛出
+#include <DxErr.h>//用于错误抛出
+//tutorial13: 新增库以满足DX10中进行D2D文字渲染
+#include <D3D10_1.h>
+#include <DXGI.h>
+#include <D2D1.h>
+#include <sstream>
+#include <dwrite.h>
 
 /* 全局变量 */
 
-LPCTSTR WndClassName = "firstwindow";//窗体名称
+LPCTSTR WndClassName = L"firstwindow";//窗体名称
 HWND hwnd = NULL;//窗体进程
 //窗口长宽
 const int WIDTH = 300;
@@ -112,6 +123,35 @@ ID3D11RasterizerState* CWcullMode;//clockwise 顺时针
 //turorial12: 新增一个新的渲染状态, 用于看见正方体的后面部分
 ID3D11RasterizerState* noCull;
 
+/*
+tutorial13: 新增
+    D3D10设备 D3d10Device
+    控制D3D10与D3D11设备的信号量 KeyedMutexD3d10 KeyedMutexD3d11
+    D2D的渲染目标 D2dRenderTarget
+    D2D的固体颜色笔刷 ColorBrush: 用于写字
+    存储2D文字纹理的后置缓存 BackBuffer11
+    共享文字纹理 SharedTexture11
+    D2D顶点缓存 D2dVertexBuffer
+    D2D索引缓存 D2dIndexBuffer
+    D2D着色器资源视图 D2dTexture
+    DWriteFactory: 渲染文字的接口, 通知D2D如何绘制
+    TextFormat: 文字格式
+    用于文字传输的宽字符串 printText
+*/
+ID3D10Device1* D3d10Device;
+IDXGIKeyedMutex* KeyedMutexD3d10;
+IDXGIKeyedMutex* KeyedMutexD3d11;
+ID2D1RenderTarget* D2dRenderTarget;
+ID2D1SolidColorBrush* ColorBrush;
+ID3D11Texture2D* BackBuffer11;
+ID3D11Texture2D* SharedTexture11;
+ID3D11Buffer* D2dVertexBuffer;
+ID3D11Buffer* D2dIndexBuffer;
+ID3D11ShaderResourceView* D2dTexture;
+IDWriteFactory* DWriteFactory;
+IDWriteTextFormat* TextFormat;
+std::wstring printText;
+
 /* ** 全局变量 ** */
 
 /* 函数声明 */
@@ -123,16 +163,26 @@ int MessageLoop();
 //按键响应,涉及esc热键退出以及窗口销毁
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-//d3d初始化
+//d3d11初始化
 bool InitializeDirect3dApp(HINSTANCE hInstance);
 //释放对象,防止内存泄漏
-void RealeaseObjects();
+void ReleaseObjects();
 //初始化场景
 bool InitializeScene();
 //场景的每帧更新
 void UpdateScene();
 //场景映射到屏幕
 void DrawScene();
+
+/*
+tutorrial13: 新增
+    InitialD2D_D3D10_DWrite: 初始化D2D D3D10 DWrite
+    InitialD2DScreenTexture: 初始化D2D纹理
+    RenderText: 渲染文字
+*/
+bool InitialD2D_D3D10_DWrite(IDXGIAdapter1* Adapter);
+void InitialD2DScreenTexture();
+void RenderText(std::wstring text);
 
 /* ** 函数声明 ** */
 
@@ -141,17 +191,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     //监测窗体是否初始化
     if (!InitializeWindow(hInstance, nShowCmd, WIDTH, HEIGHT, true))
     {
-        MessageBox(0, "Window Initialization Failed!", "ERROR", MB_OK);
+        MessageBox(0, L"Window Initialization Failed!", L"ERROR", MB_OK);
         return 0;
     }
     if (!InitializeDirect3dApp(hInstance))
     {
-        MessageBox(0, "D3d Initialization Failed!", "ERROR", MB_OK);
+        MessageBox(0, L"D3d Initialization Failed!", L"ERROR", MB_OK);
         return 0;
     }
     if (!InitializeScene())
     {
-        MessageBox(0, "Scene Initialization Failed!", "ERROR", MB_OK);
+        MessageBox(0, L"Scene Initialization Failed!", L"ERROR", MB_OK);
         return 0;
     }
 
@@ -159,7 +209,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     MessageLoop();
 
     //释放内存
-    RealeaseObjects();
+    ReleaseObjects();
 
     return 0;
 }
@@ -184,15 +234,15 @@ bool InitializeWindow(HINSTANCE hInstance, int ShowWnd, int Width, int Height, b
     wc.hIconSm = LoadIcon(NULL, IDI_APPLICATION);
     if (!RegisterClassEx(&wc))
     {
-        MessageBox(NULL, "Error registering class", "ERROR", MB_OK | MB_ICONERROR);
+        MessageBox(NULL, L"Error registering class", L"ERROR", MB_OK | MB_ICONERROR);
         return false;
     }
-    hwnd = CreateWindowEx(NULL, WndClassName, "Tutorial10-Texture",
+    hwnd = CreateWindowEx(NULL, WndClassName, L"Tutorial10-Texture",
         WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
         Width, Height, NULL, NULL, hInstance, NULL);
     if (!hwnd)
     {
-        MessageBox(NULL, "Error creating window", "ERROR", MB_OK | MB_ICONERROR);
+        MessageBox(NULL, L"Error creating window", L"ERROR", MB_OK | MB_ICONERROR);
         return false;
     }
 
@@ -231,8 +281,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     case WM_KEYDOWN:
         if (wParam == VK_ESCAPE)
         {
-            if (MessageBox(0, "Are you sure you want to exit?",
-                "Really?", MB_YESNO | MB_ICONQUESTION) == IDYES)
+            if (MessageBox(0, L"Are you sure you want to exit?",
+                L"Really?", MB_YESNO | MB_ICONQUESTION) == IDYES)
                 DestroyWindow(hwnd);
         }
         return 0;
@@ -246,14 +296,29 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 bool InitializeDirect3dApp(HINSTANCE hInstance)
 {
+    /*
+    tutorial13: 新增
+        DXGIFactory, 从而能枚举出
+        Adapter, 通过适配器使得D3D11设备能与D3D10同步
+    */
+    IDXGIFactory1* DXGIFactory;
+    hr = CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)&DXGIFactory);
+    IDXGIAdapter1* Adapter;
+    hr = DXGIFactory->EnumAdapters1(0, &Adapter);
+    DXGIFactory->Release();//用后即销毁
+
+    /*
+    tutorial13: 修改
+        BGRA格式
+    */
     DXGI_MODE_DESC bufferDesc;// 后置缓冲
     ZeroMemory(&bufferDesc, sizeof(bufferDesc));//确保对象清空, tutorial5 :使用变量名做为初始化的参数, 而非类型名
     bufferDesc.Width = WIDTH;
     bufferDesc.Height = HEIGHT;
-    //60Hz: 60/1
-    bufferDesc.RefreshRate.Numerator = 60;//分子
+    //144Hz: 144/1
+    bufferDesc.RefreshRate.Numerator = 144;//分子
     bufferDesc.RefreshRate.Denominator = 1;//分母
-    bufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;//rgba 32bit, Alpha代表透明度
+    bufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;//tutorial13: 修改为BGRA格式
     bufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
     bufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
 
@@ -268,8 +333,12 @@ bool InitializeDirect3dApp(HINSTANCE hInstance)
     swapChainDesc.Windowed = TRUE;
     swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
 
-    //创建d3d设备和交换链
-    hr = D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, NULL, NULL, NULL,
+    /* 创建d3d设备和交换链
+    tutorial13: 修改
+        进行适配器绑定, 取消GPU硬件驱动(硬件驱动在D3D10中使用: 对文字渲染), 增加DEBUG模式与BGRA支持模式
+    */
+    hr = D3D11CreateDeviceAndSwapChain(Adapter, D3D_DRIVER_TYPE_UNKNOWN, NULL,
+        D3D11_CREATE_DEVICE_DEBUG | D3D11_CREATE_DEVICE_BGRA_SUPPORT, NULL, NULL,
         D3D11_SDK_VERSION, &swapChainDesc, &SwapChain, &D3d11Device, NULL, &D3d11DeviceContent);
     //添加()错误抛出
     if (FAILED(hr))
@@ -279,27 +348,36 @@ bool InitializeDirect3dApp(HINSTANCE hInstance)
         return 0;
     }
 
-    //创建后置缓存
-    ID3D11Texture2D* BackBuffer;
-    hr = SwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&BackBuffer);
-    //添加错误抛出
-    if (FAILED(hr))
-    {
-        MessageBox(NULL, DXGetErrorDescription(hr),
-            TEXT("SwapChain->GetBuffer()"), MB_OK);
-        return 0;
-    }
+    /*
+    tutorial13: 新增
+        通过适配器初始化D3D10设备 D2D设备 DWrite设备
+    */
+    InitialD2D_D3D10_DWrite(Adapter);
+    Adapter->Release();//用后即销毁
 
-    //创建渲染目标
-    hr = D3d11Device->CreateRenderTargetView(BackBuffer, NULL, &RenderTargetView);
-    BackBuffer->Release();//后置缓存使用完毕,直接回收
-    //添加错误抛出
-    if (FAILED(hr))
-    {
-        MessageBox(NULL, DXGetErrorDescription(hr),
-            TEXT("D3d11Device->CreateRenderTargetView()"), MB_OK);
-        return 0;
-    }
+    //tutori13: 去除不必要的代码
+    //创建后置缓存
+    //ID3D11Texture2D* BackBuffer;
+    hr = SwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&BackBuffer11);
+    hr = D3d11Device->CreateRenderTargetView(BackBuffer11, NULL, &RenderTargetView);
+    ////添加错误抛出
+    //if (FAILED(hr))
+    //{
+    //    MessageBox(NULL, DXGetErrorDescription(hr),
+    //        TEXT("SwapChain->GetBuffer()"), MB_OK);
+    //    return 0;
+    //}
+
+    ////创建渲染目标
+    //hr = D3d11Device->CreateRenderTargetView(BackBuffer, NULL, &RenderTargetView);
+    //BackBuffer->Release();//后置缓存使用完毕,直接回收
+    ////添加错误抛出
+    //if (FAILED(hr))
+    //{
+    //    MessageBox(NULL, DXGetErrorDescription(hr),
+    //        TEXT("D3d11Device->CreateRenderTargetView()"), MB_OK);
+    //    return 0;
+    //}
 
     //tutorial6: 添加深度模板缓存描述及初始化
     D3D11_TEXTURE2D_DESC depthStencilDesc;
@@ -335,7 +413,7 @@ bool InitializeDirect3dApp(HINSTANCE hInstance)
     D3d11DeviceContent->OMSetRenderTargets(1, &RenderTargetView, depthStencilView);
 }
 
-void RealeaseObjects()
+void ReleaseObjects()
 {
     //三个COM组件的释放
     SwapChain->Release();
@@ -376,14 +454,33 @@ void RealeaseObjects()
     //turorial12: 渲染状态释放
     noCull->Release();
 
+    /*
+    tutorial13:
+        新增 新增的全局变量的释放
+    */
+    D3d10Device->Release();
+    KeyedMutexD3d10->Release();
+    KeyedMutexD3d11->Release();
+    D2dRenderTarget->Release();
+    ColorBrush->Release();
+    BackBuffer11->Release();
+    SharedTexture11->Release();
+    D2dVertexBuffer->Release();
+    D2dIndexBuffer->Release();
+    D2dTexture->Release();
+    DWriteFactory->Release();
+    TextFormat->Release();
 }
 
 //在这里放置物体,贴图,加载模型,音乐
 bool InitializeScene()
 {
+    //tutorial13: 新增 D2D共享纹理初始化
+    InitialD2DScreenTexture();
+
     //顶点着色器与像素着色器通过文件编译
-    hr = D3DX11CompileFromFile("Effects.fx", 0, 0, "VS", "vs_4_0", 0, 0, 0, &VS_Buffer, 0, 0);
-    hr = D3DX11CompileFromFile("Effects.fx", 0, 0, "PS", "ps_4_0", 0, 0, 0, &PS_Buffer, 0, 0);
+    hr = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "VS", "vs_4_0", 0, 0, 0, &VS_Buffer, 0, 0);
+    hr = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "PS", "ps_4_0", 0, 0, 0, &PS_Buffer, 0, 0);
     //着色器创建
     hr = D3d11Device->CreateVertexShader(
         VS_Buffer->GetBufferPointer(), VS_Buffer->GetBufferSize(), NULL, &VS);
@@ -596,7 +693,7 @@ bool InitializeScene()
 
     //tutorial10: 从文件中加载纹理
     //tutorial12: 换成一个更适合看出裁切效果的png图, 失败了
-    hr = D3DX11CreateShaderResourceViewFromFile(D3d11Device, "cube-png.png",
+    hr = D3DX11CreateShaderResourceViewFromFile(D3d11Device, L"braynzar.png",
         NULL, NULL, &CubeTexture, NULL);
     /* tutorial9: CubeTexture创建测试单元开始 */
     if (FAILED(hr))
@@ -633,7 +730,12 @@ bool InitializeScene()
     ZeroMemory(&rtbd, sizeof(rtbd));
     rtbd.BlendEnable = true;
     rtbd.SrcBlend = D3D11_BLEND_SRC_COLOR;//原数据来自像素着色器(RGB)
-    rtbd.DestBlend = D3D11_BLEND_BLEND_FACTOR;//数据来源于ID3D10Device::OMSetBlendState函数中设置的belnd factor
+    /*
+        数据来源于ID3D11Device::OMSetBlendState函数中设置的belnd factor: D3D11_BLEND_BLEND_FACTOR
+    tutorial13: 修改DestBlend
+        使得只有文本渲染, 其余纹理覆盖场景
+    */
+    rtbd.DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
     rtbd.BlendOp = D3D11_BLEND_OP_ADD;//运算符
     rtbd.SrcBlendAlpha = D3D11_BLEND_ONE;//原数据(1,1,1,1)白色
     rtbd.DestBlendAlpha = D3D11_BLEND_ZERO;//原数据(0,0,0,0)黑色
@@ -735,9 +837,17 @@ void DrawScene()
         D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL,
         1.0f, 0);
 
+    //tutorial13: 新增 渲染正方形之前, 绑定正确的顶点与索引缓存, 由于tutorial13创建了新的
+    D3d11DeviceContent->IASetIndexBuffer(squareIndexBuffer, DXGI_FORMAT_R32_UINT, 0);
+    UINT stride = sizeof(Vertex);//顶点大小
+    UINT offset = 0;//偏移量
+    D3d11DeviceContent->IAGetVertexBuffers(0, 1, &squareVertexBuffer, &stride, &offset);
+
+
     //tutorial12: 先默认渲染, 然后无背面剔除渲染
-    D3d11DeviceContent->RSSetState(NULL);//null为默认
-    D3d11DeviceContent->RSSetState(noCull);
+    //tutorial13: 去除渲染部分, 在renderText中已经实现
+    //D3d11DeviceContent->RSSetState(NULL);//null为默认
+    //D3d11DeviceContent->RSSetState(noCull);
 
     //tutorial12: 产生裁切效果因此禁用混合效果
     ////tutorial11: 新增混合因子, 新增混合状态与OM绑定
@@ -823,8 +933,199 @@ void DrawScene()
     //D3d11DeviceContent->RSSetState(CWcullMode);
     D3d11DeviceContent->DrawIndexed(36, 0, 0);
 
+    //tutorial13: 新增 正方体渲染完毕后, 开始渲染字体
+    RenderText(L"Hello World!");
+
     //交换链将前置缓存映射到显示器, 即图像呈现
     SwapChain->Present(0, 0);
 }
 
+/*
+tutorial13:
+    新增D2D D3D10 DWrite设备初始化, 通过共享表面的方式进行文字渲染
+*/
+bool InitialD2D_D3D10_DWrite(IDXGIAdapter1* Adapter)
+{
+    //tutorial13: 新增D3D10.1设备初始化
+    hr = D3D10CreateDevice1(Adapter, D3D10_DRIVER_TYPE_HARDWARE, NULL,
+        D3D10_CREATE_DEVICE_DEBUG | D3D10_CREATE_DEVICE_BGRA_SUPPORT,
+        D3D10_FEATURE_LEVEL_9_3, D3D10_1_SDK_VERSION, &D3d10Device);
+
+    //tutorial13: 新增sharedTexture初始化
+    D3D11_TEXTURE2D_DESC SharedTextureDesc;
+    ZeroMemory(&SharedTextureDesc, sizeof(D3D11_TEXTURE2D_DESC));
+    SharedTextureDesc.Width = WIDTH;
+    SharedTextureDesc.Height = HEIGHT;
+    SharedTextureDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    SharedTextureDesc.MipLevels = 1;
+    SharedTextureDesc.ArraySize = 1;
+    SharedTextureDesc.SampleDesc.Count = 1;
+    SharedTextureDesc.Usage = D3D11_USAGE_DEFAULT;
+    SharedTextureDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+    SharedTextureDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX;
+    hr = D3d11Device->CreateTexture2D(&SharedTextureDesc, NULL, &SharedTexture11);
+
+    //tutorial13: 新增 获取共享纹理的信号量IDXGIKeyedMutex
+    hr = SharedTexture11->QueryInterface(__uuidof(IDXGIKeyedMutex), (void**)&KeyedMutexD3d11);
+
+    //tutorial13: 新增 通过DXGI创建D3D10设备可以访问的D3D11纹理句柄交互
+    IDXGIResource* SharedResource10;
+    HANDLE SharedHandle10;
+    hr = SharedTexture11->QueryInterface(__uuidof(IDXGIResource), (void**)&SharedResource10);
+    hr = SharedResource10->GetSharedHandle(&SharedHandle10);//可访问的句柄
+    SharedResource10->Release();
+
+    //tutorial13: 新增 为D3D10设备访问D3D11纹理增加互斥信号量(访问共享表面)
+    IDXGISurface1* SharedSurface10;
+    hr = D3d10Device->OpenSharedResource(SharedHandle10,
+        __uuidof(IDXGISurface1), (void**)&SharedSurface10);
+    hr = SharedSurface10->QueryInterface(__uuidof(IDXGIKeyedMutex), (void**)&KeyedMutexD3d10);
+
+    //tutorial13: 新增 通过D2DFactory创建D2D资源
+    ID2D1Factory* D2dFactory;
+    hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory), (void**)&D2dFactory);
+
+    /*
+    tutorial13: 新增
+        创建D2D渲染目标属性
+        硬件渲染 + 像素格式: 默认的未知格式+不透明
+    */
+    D2D1_RENDER_TARGET_PROPERTIES D2dRenderTargetProperties;
+    ZeroMemory(&D2dRenderTargetProperties, sizeof(D2dRenderTargetProperties));
+    D2dRenderTargetProperties.type = D2D1_RENDER_TARGET_TYPE_HARDWARE;
+    D2dRenderTargetProperties.pixelFormat = D2D1::PixelFormat(
+        DXGI_FORMAT_UNKNOWN, D2D1_ALPHA_MODE_PREMULTIPLIED);
+
+    /*
+    tutorial13: 新增
+        创建DXGI渲染目标属性, 使得D2D与D3D10设备能够访问
+    */
+    hr = D2dFactory->CreateDxgiSurfaceRenderTarget(
+        SharedSurface10, &D2dRenderTargetProperties, &D2dRenderTarget);
+    SharedSurface10->Release();
+    D2dFactory->Release();
+
+    //tutorial13: 新增 创建笔刷
+    hr = D2dRenderTarget->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 0.0f, 1.0f), &ColorBrush);
+
+    /*
+    tutorial13: 新增
+        初始化DWrite: 创建DW Factory 共享格式
+    */
+    hr = DWriteCreateFactory(
+        DWRITE_FACTORY_TYPE_SHARED,
+        __uuidof(IDWriteFactory),
+        reinterpret_cast<IUnknown**>(&DWriteFactory));
+
+    //tutorial13: 新增 字体格式
+    hr = DWriteFactory->CreateTextFormat(
+        L"Script", NULL,
+        DWRITE_FONT_WEIGHT_REGULAR, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+        44.0f, L"en-us", &TextFormat
+    );
+
+    //tutorial13: 新增 字体排列设置
+    hr = TextFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);//水平方向左对齐
+    hr = TextFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);//竖直方向顶端对齐
+
+    //tutorial13: 新增 防止Debug报警告D3D10设备图元设置
+    D3d10Device->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_LINELIST);
+    return true;
+}
+
+/*
+tutorial13:
+    新增D2D 纹理初始化
+    创建正方形覆盖场景
+    存储索引缓存与顶点缓存
+    通过D2D与D3D10的共享纹理创建着色器资源视图(shader resource view)
+    通过着色器资源视图覆盖创建的正方形, 通过混合使得字体可见
+*/
+void InitialD2DScreenTexture()
+{
+    //tutorial13: 新增 覆盖场景的正方形的顶点与索引创建
+    Vertex v[] =
+    {
+        Vertex(-1.0f, -1.0f, -1.0f, 0.0f, 1.0f),
+        Vertex(-1.0f,  1.0f, -1.0f, 0.0f, 0.0f),
+        Vertex(1.0f,  1.0f, -1.0f, 1.0f, 0.0f),
+        Vertex(1.0f, -1.0f, -1.0f, 1.0f, 1.0f),
+    };
+    DWORD indices[] = {
+    0,  1,  2,
+    0,  2,  3,
+    };
+    D3D11_BUFFER_DESC indexBufferDesc;
+    ZeroMemory(&indexBufferDesc, sizeof(indexBufferDesc));
+    indexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+    indexBufferDesc.ByteWidth = sizeof(DWORD) * 2 * 3;
+    indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+    indexBufferDesc.CPUAccessFlags = 0;
+    indexBufferDesc.MiscFlags = 0;
+    D3D11_SUBRESOURCE_DATA indexInitialData;
+    indexInitialData.pSysMem = indices;
+    D3d11Device->CreateBuffer(&indexBufferDesc, &indexInitialData, &D2dIndexBuffer);
+
+    D3D11_BUFFER_DESC vertexBufferDesc;
+    ZeroMemory(&vertexBufferDesc, sizeof(vertexBufferDesc));
+    vertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+    vertexBufferDesc.ByteWidth = sizeof(Vertex) * 4;
+    vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+    vertexBufferDesc.CPUAccessFlags = 0;
+    vertexBufferDesc.MiscFlags = 0;
+    D3D11_SUBRESOURCE_DATA vertexBufferData;
+    ZeroMemory(&vertexBufferData, sizeof(vertexBufferData));
+    vertexBufferData.pSysMem = v;
+    hr = D3d11Device->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &D2dVertexBuffer);
+
+    //tutorial13: 新增 通过共享纹理创建着色器资源视图
+    D3d11Device->CreateShaderResourceView(SharedTexture11, NULL, &D2dTexture);
+}
+
+//tutorial13: 新增 渲染文字
+void RenderText(std::wstring text)
+{
+    //tutorial13: 新增 D3D11设备先释放共享纹理使得D3D10设备能够接触(互斥)
+    KeyedMutexD3d11->ReleaseSync(0);
+    KeyedMutexD3d10->AcquireSync(0, 5);//至少接触5ms
+    //tutorial13: 新增 D3D10设备接触后, D2D目标开始渲染并清空背景, alpha=0全透
+    D2dRenderTarget->BeginDraw();
+    D2dRenderTarget->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f));
+    //tutorial13: 新增 用于输出到屏幕上的字符串
+    std::wostringstream printString;
+    printString << text;
+    printText = printString.str();
+    //tutorial13: 新增 字体颜色, 并赋予给笔刷
+    D2D1_COLOR_F fontColor = D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f);
+    ColorBrush->SetColor(fontColor);
+    //tutorial13: 新增 创建一个矩形文字框: 前两个为用户(x,y)起始位置, 后两个为长宽大小
+    D2D1_RECT_F layoutRect = D2D1::RectF(0, 0, WIDTH, HEIGHT);
+    //tutorial13: 新增 绘制文字后, 结束绘制
+    D2dRenderTarget->DrawTextW(
+        printText.c_str(), wcslen(printText.c_str()), TextFormat, layoutRect, ColorBrush
+    );
+    D2dRenderTarget->EndDraw();
+    //tutorial13: 新增 D3D10设备用完后挂起 D3D11唤醒
+    KeyedMutexD3d10->ReleaseSync(1);
+    KeyedMutexD3d11->AcquireSync(1, 5);
+    //tutorial13: 新增 启用混合状态用于绘制透明纹理进行覆盖
+    D3d11DeviceContent->OMSetBlendState(Transparency, NULL, 0xffffffff);
+    //tutorial13: 新增 D2D的索引缓存与IA绑定
+    D3d11DeviceContent->IASetIndexBuffer(D2dIndexBuffer, DXGI_FORMAT_R32_UINT, 0);
+    //tutorial13: 新增 D2D顶点缓存绑定IA
+    UINT stride = sizeof(Vertex);//顶点大小
+    UINT offset = 0;//偏移量
+    D3d11DeviceContent->IAGetVertexBuffers(0, 1, &D2dVertexBuffer, &stride, &offset);
+    //tutorial13: 新增 更改WVP矩阵
+    WVP = XMMatrixIdentity();//重置矩阵
+    cbPerObj.WVP = XMMatrixTranspose(WVP);
+    D3d11DeviceContent->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
+    D3d11DeviceContent->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
+    //tutorial13: 新增 设置共享的D2D资源与采样率
+    D3d11DeviceContent->PSSetShaderResources(0, 1, &D2dTexture);
+    D3d11DeviceContent->PSGetSamplers(0, 1, &CubeTextureSampleState);
+    //tutorial13: 新增 渲染正方形
+    D3d11DeviceContent->RSSetState(CWcullMode);//顺时针渲染, 剔除背面
+    D3d11DeviceContent->DrawIndexed(6, 0, 0);
+}
 /* ** 函数实现 ** */
