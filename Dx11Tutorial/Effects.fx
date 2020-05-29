@@ -29,12 +29,8 @@ VS_OUTPUT VS(float4 inPos : POSITION, float2 inTexCoord : TEXCOORD)
 	return output;
 }
 
-//tutorial12: 
+//tutorial14: ¸Ä»Ø
 float4 PS(VS_OUTPUT input) : SV_TARGET
 {
-    float4 diffuse = ObjTexture.Sample(ObjSamplerState, input.TexCoord);
-
-    clip(diffuse.a - .25);
-
-    return diffuse;
+    return ObjTexture.Sample(ObjSamplerState,input.TexCoord);
 }
