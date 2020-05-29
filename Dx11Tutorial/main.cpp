@@ -4,16 +4,16 @@
 #pragma comment(lib, "d3dx10.lib")
 #pragma comment(lib, "DxErr.lib")
 //tutorial13: 新增库以满足DX10中进行D2D文字渲染
-#pragma comment (lib, "D3D10_1.lib")
-#pragma comment (lib, "DXGI.lib")
-#pragma comment (lib, "D2D1.lib")
-#pragma comment (lib, "dwrite.lib")
+#pragma comment(lib, "D3D10_1.lib")
+#pragma comment(lib, "DXGI.lib")
+#pragma comment(lib, "D2D1.lib")
+#pragma comment(lib, "dwrite.lib")
 
 #include <d3d11.h>
 #include <d3dx11.h>
 #include <d3dx10.h>
 #include <xnamath.h>
-#include <DxErr.h>//用于错误抛出
+#include <DxErr.h> //用于错误抛出
 //tutorial13: 新增库以满足DX10中进行D2D文字渲染
 #include <D3D10_1.h>
 #include <DXGI.h>
@@ -23,17 +23,17 @@
 
 /* 全局变量 */
 
-LPCTSTR WndClassName = L"firstwindow";//窗体名称
-HWND hwnd = NULL;//窗体进程
+LPCTSTR WndClassName = L"firstwindow"; //窗体名称
+HWND hwnd = NULL;                      //窗体进程
 //窗口长宽
 const int WIDTH = 300;
 const int HEIGHT = 300;
 
 //交换链以及d3d设备、上下文、渲染目标视图
-IDXGISwapChain* SwapChain;
-ID3D11Device* D3d11Device;
-ID3D11DeviceContext* D3d11DeviceContent;
-ID3D11RenderTargetView* RenderTargetView;
+IDXGISwapChain *SwapChain;
+ID3D11Device *D3d11Device;
+ID3D11DeviceContext *D3d11DeviceContent;
+ID3D11RenderTargetView *RenderTargetView;
 //颜色,用于背景颜色更改
 float red = 0.0f;
 float green = 0.0f;
@@ -41,20 +41,20 @@ float blue = 0.0f;
 int colormodr = 1;
 int colormodg = 1;
 int colormodb = 1;
-HRESULT hr;	//用于错误监测
+HRESULT hr; //用于错误监测
 
 //ID3D11Buffer* triangleVertBuffer;//三角形顶点缓存, tutorial5: 被正方形顶点缓存替代
-ID3D11VertexShader* VS;//顶点着色器
-ID3D11PixelShader* PS;//像素着色器
-ID3D10Blob* VS_Buffer;//顶点着色器缓存
-ID3D10Blob* PS_Buffer;//像素着色器缓存
-ID3D11InputLayout* vertexLayout;//顶点输入布局
+ID3D11VertexShader *VS;          //顶点着色器
+ID3D11PixelShader *PS;           //像素着色器
+ID3D10Blob *VS_Buffer;           //顶点着色器缓存
+ID3D10Blob *PS_Buffer;           //像素着色器缓存
+ID3D11InputLayout *vertexLayout; //顶点输入布局
 
 /*
 tutorial10:
     删除颜色属性, 替换为纹理属性
 */
-struct Vertex//顶点结构
+struct Vertex //顶点结构
 {
     Vertex() {}
     //tutorial4: 增加RGBA颜色元素, tutorial10: 替换为纹理属性
@@ -67,22 +67,22 @@ struct Vertex//顶点结构
 //输入布局, tutorial10: 根据顶点结构修改
 D3D11_INPUT_ELEMENT_DESC layout[] =
 {
-    {"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0},
-    {"TEXCOORD",0,DXGI_FORMAT_R32G32_FLOAT,0,12,D3D11_INPUT_PER_VERTEX_DATA,0},//偏移量
+    {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
+    {"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0}, //偏移量
 };
-UINT numElements = ARRAYSIZE(layout);//保存布局数组的大小
+UINT numElements = ARRAYSIZE(layout); //保存布局数组的大小
 
 //tutorial5: 加入索引缓存, 为了展示索引的功能, 加入矩形演示
 //矩形的顶点缓存与索引缓存
-ID3D11Buffer* squareIndexBuffer;
-ID3D11Buffer* squareVertexBuffer;
+ID3D11Buffer *squareIndexBuffer;
+ID3D11Buffer *squareVertexBuffer;
 
 //tutorial6: 加入深度/模板视图与深度/模板缓存
-ID3D11DepthStencilView* depthStencilView;
-ID3D11Texture2D* depthStencilBuffer;
+ID3D11DepthStencilView *depthStencilView;
+ID3D11Texture2D *depthStencilBuffer;
 
 //tutorial7: 加入常量缓存, 存储在WVP矩阵, 逐对象刷新
-ID3D11Buffer* cbPerObjectBuffer;
+ID3D11Buffer *cbPerObjectBuffer;
 //tutorial7: 加入各个空间转换矩阵的定义
 XMMATRIX WVP;
 XMMATRIX worldSpace;
@@ -91,7 +91,7 @@ XMMATRIX cameraProjection;
 //tutorial7: 加入向量定义
 XMVECTOR cameraPosition;
 XMVECTOR cameraTarget;
-XMVECTOR cameraUp;//摄像机的向上方向, 可见Note中的 视图空间(view space)
+XMVECTOR cameraUp; //摄像机的向上方向, 可见Note中的 视图空间(view space)
 //tutorial7: 增加常量缓存结构
 struct cbPerObject
 {
@@ -106,22 +106,22 @@ XMMATRIX cube2World;
 XMMATRIX Rotation;
 XMMATRIX Scale;
 XMMATRIX Translation;
-float rot = 0.01f;//旋转角度
+float rot = 0.01f; //旋转角度
 
 //tutorial9: 设置管道的RS阶段的呈现状态
-ID3D11RasterizerState* WireFrame;
+ID3D11RasterizerState *WireFrame;
 
 //tutorial10: 新增保存从文件中加载的纹理以及保存采样器状态信息的接口
-ID3D11ShaderResourceView* CubeTexture;
-ID3D11SamplerState* CubeTextureSampleState;
+ID3D11ShaderResourceView *CubeTexture;
+ID3D11SamplerState *CubeTextureSampleState;
 
 //tutorial11: 新增一个混合状态, 两个光栅状态, 其中一个顺时针另一个逆时针
-ID3D11BlendState* Transparency;
-ID3D11RasterizerState* CCWcullMode;//counter clockwise 逆时针
-ID3D11RasterizerState* CWcullMode;//clockwise 顺时针
+ID3D11BlendState *Transparency;
+ID3D11RasterizerState *CCWcullMode; //counter clockwise 逆时针
+ID3D11RasterizerState *CWcullMode;  //clockwise 顺时针
 
 //turorial12: 新增一个新的渲染状态, 用于看见正方体的后面部分
-ID3D11RasterizerState* noCull;
+ID3D11RasterizerState *noCull;
 
 /*
 tutorial13: 新增
@@ -138,19 +138,29 @@ tutorial13: 新增
     TextFormat: 文字格式
     用于文字传输的宽字符串 printText
 */
-ID3D10Device1* D3d10Device;
-IDXGIKeyedMutex* KeyedMutexD3d10;
-IDXGIKeyedMutex* KeyedMutexD3d11;
-ID2D1RenderTarget* D2dRenderTarget;
-ID2D1SolidColorBrush* ColorBrush;
-ID3D11Texture2D* BackBuffer11;
-ID3D11Texture2D* SharedTexture11;
-ID3D11Buffer* D2dVertexBuffer;
-ID3D11Buffer* D2dIndexBuffer;
-ID3D11ShaderResourceView* D2dTexture;
-IDWriteFactory* DWriteFactory;
-IDWriteTextFormat* TextFormat;
+ID3D10Device1 *D3d10Device;
+IDXGIKeyedMutex *KeyedMutexD3d10;
+IDXGIKeyedMutex *KeyedMutexD3d11;
+ID2D1RenderTarget *D2dRenderTarget;
+ID2D1SolidColorBrush *ColorBrush;
+ID3D11Texture2D *BackBuffer11;
+ID3D11Texture2D *SharedTexture11;
+ID3D11Buffer *D2dVertexBuffer;
+ID3D11Buffer *D2dIndexBuffer;
+ID3D11ShaderResourceView *D2dTexture;
+IDWriteFactory *DWriteFactory;
+IDWriteTextFormat *TextFormat;
 std::wstring printText;
+
+//tutorial14: 新增 用于传递FPS值
+double CountsPerSecond = 0.0;
+__int64 CounterStart = 0;
+
+int FrameCount = 0;
+int fps = 0;
+
+__int64 FrameTimeOld = 0;
+double FrameTime;
 
 /* ** 全局变量 ** */
 
@@ -170,7 +180,8 @@ void ReleaseObjects();
 //初始化场景
 bool InitializeScene();
 //场景的每帧更新
-void UpdateScene();
+//tutorial14: 修改 新增time形参, 根据时间进行更新, 防止不同FPS值下物体运动速度不同
+void UpdateScene(double time);
 //场景映射到屏幕
 void DrawScene();
 
@@ -180,9 +191,20 @@ tutorrial13: 新增
     InitialD2DScreenTexture: 初始化D2D纹理
     RenderText: 渲染文字
 */
-bool InitialD2D_D3D10_DWrite(IDXGIAdapter1* Adapter);
+bool InitialD2D_D3D10_DWrite(IDXGIAdapter1 *Adapter);
 void InitialD2DScreenTexture();
-void RenderText(std::wstring text);
+//tutorial14: 修改 新增inInt形参, 传递FPS值, 虽然FPS是全局变量, 但为了结构的清晰仍然使用参数传递
+void RenderText(std::wstring text, int inInt);
+
+/*
+tutorial14: 新增
+    StartTimer: 启动计时器
+    GetTime: 获取时间
+    GetFrameTime: 获取每帧时间
+*/
+void StartTimer();
+double GetTime();
+double GetFrameTime();
 
 /* ** 函数声明 ** */
 
@@ -267,7 +289,17 @@ int MessageLoop()
         else
         {
             // run the game part
-            UpdateScene();
+            //tutorial14: 新增 计算每秒帧数
+            FrameCount++;         //每次循环则有一帧
+            if (GetTime() > 1.0f) //一秒后, 统计一秒内的帧数
+            {
+                fps = FrameCount;
+                FrameCount = 0;
+                StartTimer(); //重新计时
+            }
+            FrameTime = GetFrameTime(); //每一帧的时间
+
+            UpdateScene(FrameTime); //根据这个时间进行场景更新
             DrawScene();
         }
     }
@@ -301,29 +333,29 @@ bool InitializeDirect3dApp(HINSTANCE hInstance)
         DXGIFactory, 从而能枚举出
         Adapter, 通过适配器使得D3D11设备能与D3D10同步
     */
-    IDXGIFactory1* DXGIFactory;
-    hr = CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)&DXGIFactory);
-    IDXGIAdapter1* Adapter;
+    IDXGIFactory1 *DXGIFactory;
+    hr = CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void **)&DXGIFactory);
+    IDXGIAdapter1 *Adapter;
     hr = DXGIFactory->EnumAdapters1(0, &Adapter);
-    DXGIFactory->Release();//用后即销毁
+    DXGIFactory->Release(); //用后即销毁
 
     /*
     tutorial13: 修改
         BGRA格式
     */
-    DXGI_MODE_DESC bufferDesc;// 后置缓冲
-    ZeroMemory(&bufferDesc, sizeof(bufferDesc));//确保对象清空, tutorial5 :使用变量名做为初始化的参数, 而非类型名
+    DXGI_MODE_DESC bufferDesc;                   // 后置缓冲
+    ZeroMemory(&bufferDesc, sizeof(bufferDesc)); //确保对象清空, tutorial5 :使用变量名做为初始化的参数, 而非类型名
     bufferDesc.Width = WIDTH;
     bufferDesc.Height = HEIGHT;
     //144Hz: 144/1
-    bufferDesc.RefreshRate.Numerator = 144;//分子
-    bufferDesc.RefreshRate.Denominator = 1;//分母
-    bufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;//tutorial13: 修改为BGRA格式
+    bufferDesc.RefreshRate.Numerator = 144;         //分子
+    bufferDesc.RefreshRate.Denominator = 1;         //分母
+    bufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM; //tutorial13: 修改为BGRA格式
     bufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
     bufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
 
-    DXGI_SWAP_CHAIN_DESC swapChainDesc;//交换链,
-    ZeroMemory(&swapChainDesc, sizeof(swapChainDesc));//确保对象清空, tutorial5: 使用变量名做为初始化的参数, 而非类型名
+    DXGI_SWAP_CHAIN_DESC swapChainDesc;                //交换链,
+    ZeroMemory(&swapChainDesc, sizeof(swapChainDesc)); //确保对象清空, tutorial5: 使用变量名做为初始化的参数, 而非类型名
     swapChainDesc.BufferDesc = bufferDesc;
     swapChainDesc.SampleDesc.Count = 1;
     swapChainDesc.SampleDesc.Quality = 0;
@@ -353,12 +385,12 @@ bool InitializeDirect3dApp(HINSTANCE hInstance)
         通过适配器初始化D3D10设备 D2D设备 DWrite设备
     */
     InitialD2D_D3D10_DWrite(Adapter);
-    Adapter->Release();//用后即销毁
+    Adapter->Release(); //用后即销毁
 
     //tutori13: 去除不必要的代码
     //创建后置缓存
     //ID3D11Texture2D* BackBuffer;
-    hr = SwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&BackBuffer11);
+    hr = SwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **)&BackBuffer11);
     hr = D3d11Device->CreateRenderTargetView(BackBuffer11, NULL, &RenderTargetView);
     ////添加错误抛出
     //if (FAILED(hr))
@@ -503,39 +535,39 @@ bool InitializeScene()
     {
         // Front Face
         Vertex(-1.0f, -1.0f, -1.0f, 0.0f, 1.0f),
-        Vertex(-1.0f,  1.0f, -1.0f, 0.0f, 0.0f),
-        Vertex(1.0f,  1.0f, -1.0f, 1.0f, 0.0f),
+        Vertex(-1.0f, 1.0f, -1.0f, 0.0f, 0.0f),
+        Vertex(1.0f, 1.0f, -1.0f, 1.0f, 0.0f),
         Vertex(1.0f, -1.0f, -1.0f, 1.0f, 1.0f),
 
         // Back Face
         Vertex(-1.0f, -1.0f, 1.0f, 1.0f, 1.0f),
         Vertex(1.0f, -1.0f, 1.0f, 0.0f, 1.0f),
-        Vertex(1.0f,  1.0f, 1.0f, 0.0f, 0.0f),
-        Vertex(-1.0f,  1.0f, 1.0f, 1.0f, 0.0f),
+        Vertex(1.0f, 1.0f, 1.0f, 0.0f, 0.0f),
+        Vertex(-1.0f, 1.0f, 1.0f, 1.0f, 0.0f),
 
         // Top Face
         Vertex(-1.0f, 1.0f, -1.0f, 0.0f, 1.0f),
-        Vertex(-1.0f, 1.0f,  1.0f, 0.0f, 0.0f),
-        Vertex(1.0f, 1.0f,  1.0f, 1.0f, 0.0f),
+        Vertex(-1.0f, 1.0f, 1.0f, 0.0f, 0.0f),
+        Vertex(1.0f, 1.0f, 1.0f, 1.0f, 0.0f),
         Vertex(1.0f, 1.0f, -1.0f, 1.0f, 1.0f),
 
         // Bottom Face
         Vertex(-1.0f, -1.0f, -1.0f, 1.0f, 1.0f),
         Vertex(1.0f, -1.0f, -1.0f, 0.0f, 1.0f),
-        Vertex(1.0f, -1.0f,  1.0f, 0.0f, 0.0f),
-        Vertex(-1.0f, -1.0f,  1.0f, 1.0f, 0.0f),
+        Vertex(1.0f, -1.0f, 1.0f, 0.0f, 0.0f),
+        Vertex(-1.0f, -1.0f, 1.0f, 1.0f, 0.0f),
 
         // Left Face
-        Vertex(-1.0f, -1.0f,  1.0f, 0.0f, 1.0f),
-        Vertex(-1.0f,  1.0f,  1.0f, 0.0f, 0.0f),
-        Vertex(-1.0f,  1.0f, -1.0f, 1.0f, 0.0f),
+        Vertex(-1.0f, -1.0f, 1.0f, 0.0f, 1.0f),
+        Vertex(-1.0f, 1.0f, 1.0f, 0.0f, 0.0f),
+        Vertex(-1.0f, 1.0f, -1.0f, 1.0f, 0.0f),
         Vertex(-1.0f, -1.0f, -1.0f, 1.0f, 1.0f),
 
         // Right Face
         Vertex(1.0f, -1.0f, -1.0f, 0.0f, 1.0f),
-        Vertex(1.0f,  1.0f, -1.0f, 0.0f, 0.0f),
-        Vertex(1.0f,  1.0f,  1.0f, 1.0f, 0.0f),
-        Vertex(1.0f, -1.0f,  1.0f, 1.0f, 1.0f),
+        Vertex(1.0f, 1.0f, -1.0f, 0.0f, 0.0f),
+        Vertex(1.0f, 1.0f, 1.0f, 1.0f, 0.0f),
+        Vertex(1.0f, -1.0f, 1.0f, 1.0f, 1.0f),
     };
     /*
     tutorial5:
@@ -547,15 +579,15 @@ bool InitializeScene()
     */
     DWORD indices[] = {
         // Front Face
-        0,  1,  2,
-        0,  2,  3,
+        0, 1, 2,
+        0, 2, 3,
 
         // Back Face
-        4,  5,  6,
-        4,  6,  7,
+        4, 5, 6,
+        4, 6, 7,
 
         // Top Face
-        8,  9, 10,
+        8, 9, 10,
         8, 10, 11,
 
         // Bottom Face
@@ -568,8 +600,7 @@ bool InitializeScene()
 
         // Right Face
         20, 21, 22,
-        20, 22, 23
-    };
+        20, 22, 23 };
 
     //tutorial5: 初始化索引缓存, 使用变量名做为初始化的参数, 而非类型名
     D3D11_BUFFER_DESC indexBufferDesc;
@@ -616,11 +647,11 @@ bool InitializeScene()
     vertexBufferData.pSysMem = v;
     hr = D3d11Device->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &squareVertexBuffer);
     //顶点缓存设置
-    UINT stride = sizeof(Vertex);//顶点大小
-    UINT offset = 0;//偏移量
+    UINT stride = sizeof(Vertex); //顶点大小
+    UINT offset = 0;              //偏移量
     D3d11DeviceContent->IASetVertexBuffers(0, 1,
-        &squareVertexBuffer, &stride, &offset);//顶点缓存与IA绑定
-    //顶点输入布局
+        &squareVertexBuffer, &stride, &offset); //顶点缓存与IA绑定
+//顶点输入布局
     hr = D3d11Device->CreateInputLayout(layout, numElements,
         VS_Buffer->GetBufferPointer(), VS_Buffer->GetBufferSize(), &vertexLayout);
     //顶点输入布局与IA绑定
@@ -672,42 +703,39 @@ bool InitializeScene()
     //tutorial7: 创建视图空间
     cameraView = XMMatrixLookAtLH(cameraPosition, cameraTarget, cameraUp);
     //tutorial7: 创建投影空间, 0.4*3.14没搞懂(?)
-    cameraProjection = XMMatrixPerspectiveFovLH(0.4f*3.14f, (float)WIDTH / HEIGHT, 1.0f, 1000.0f);
+    cameraProjection = XMMatrixPerspectiveFovLH(0.4f * 3.14f, (float)WIDTH / HEIGHT, 1.0f, 1000.0f);
 
     //tutorial9: 创建光栅状态以及与RS绑定
     //tutorial10: 为了加载贴图将线框渲染改为实体渲染
     D3D11_RASTERIZER_DESC wireFrameDesc;
     ZeroMemory(&wireFrameDesc, sizeof(wireFrameDesc));
-    wireFrameDesc.FillMode = D3D11_FILL_SOLID;	//tutorial10: 为了加载贴图将线框渲染改为实体渲染
+    wireFrameDesc.FillMode = D3D11_FILL_SOLID; //tutorial10: 为了加载贴图将线框渲染改为实体渲染
     wireFrameDesc.CullMode = D3D11_CULL_NONE;
     hr = D3d11Device->CreateRasterizerState(&wireFrameDesc, &WireFrame);
     /* tutorial9: WireFrame创建测试单元开始 */
-    if (FAILED(hr))
-    {
-        MessageBox(NULL, DXGetErrorDescription(hr),
-            TEXT("创建光栅状态"), MB_OK);
-        return 0;
-    }
+    //if (FAILED(hr))
+    //{
+    //    MessageBox(NULL, DXGetErrorDescription(hr), TEXT("创建光栅状态"), MB_OK);
+    //    return 0;
+    //}
     /* WireFrame创建测试单元结束 */
     D3d11DeviceContent->RSSetState(WireFrame);
 
     //tutorial10: 从文件中加载纹理
     //tutorial12: 换成一个更适合看出裁切效果的png图, 失败了
-    hr = D3DX11CreateShaderResourceViewFromFile(D3d11Device, L"braynzar.png",
-        NULL, NULL, &CubeTexture, NULL);
+    hr = D3DX11CreateShaderResourceViewFromFile(D3d11Device, L"braynzar.png", NULL, NULL, &CubeTexture, NULL);
     /* tutorial9: CubeTexture创建测试单元开始 */
     if (FAILED(hr))
     {
-        MessageBox(NULL, DXGetErrorDescription(hr),
-            TEXT("从文件中加载纹理"), MB_OK);
+        MessageBox(NULL, DXGetErrorDescription(hr), TEXT("从文件中加载纹理"), MB_OK);
         return 0;
     }
     /* CubeTexture创建测试单元结束 */
     //tutorial10: 采样器描述创建与初始化
     D3D11_SAMPLER_DESC sampleDesc;
     ZeroMemory(&sampleDesc, sizeof(sampleDesc));
-    sampleDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;//使用线性插值缩小, 放大, 和mip级采样
-    sampleDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;//在每个(u,v)整数结点平铺纹理, 例如u属于(0,3), 则平铺三次
+    sampleDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR; //使用线性插值缩小, 放大, 和mip级采样
+    sampleDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;    //在每个(u,v)整数结点平铺纹理, 例如u属于(0,3), 则平铺三次
     sampleDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
     sampleDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
     sampleDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
@@ -715,12 +743,11 @@ bool InitializeScene()
     sampleDesc.MaxLOD = D3D11_FLOAT32_MAX;
     hr = D3d11Device->CreateSamplerState(&sampleDesc, &CubeTextureSampleState);
     /* tutorial10: CubeTextureSampleState创建测试单元开始 */
-    if (FAILED(hr))
-    {
-        MessageBox(NULL, DXGetErrorDescription(hr),
-            TEXT("纹理采样状态"), MB_OK);
-        return 0;
-    }
+    //if (FAILED(hr))
+    //{
+    //    MessageBox(NULL, DXGetErrorDescription(hr), TEXT("纹理采样状态"), MB_OK);
+    //    return 0;
+    //}
     /* CubeTextureSampleState创建测试单元结束 */
 
     //tutorial11: 新增混合方程描述
@@ -729,19 +756,19 @@ bool InitializeScene()
     D3D11_RENDER_TARGET_BLEND_DESC rtbd;
     ZeroMemory(&rtbd, sizeof(rtbd));
     rtbd.BlendEnable = true;
-    rtbd.SrcBlend = D3D11_BLEND_SRC_COLOR;//原数据来自像素着色器(RGB)
+    rtbd.SrcBlend = D3D11_BLEND_SRC_COLOR; //原数据来自像素着色器(RGB)
     /*
         数据来源于ID3D11Device::OMSetBlendState函数中设置的belnd factor: D3D11_BLEND_BLEND_FACTOR
     tutorial13: 修改DestBlend
         使得只有文本渲染, 其余纹理覆盖场景
     */
     rtbd.DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
-    rtbd.BlendOp = D3D11_BLEND_OP_ADD;//运算符
-    rtbd.SrcBlendAlpha = D3D11_BLEND_ONE;//原数据(1,1,1,1)白色
-    rtbd.DestBlendAlpha = D3D11_BLEND_ZERO;//原数据(0,0,0,0)黑色
-    rtbd.BlendOpAlpha = D3D11_BLEND_OP_ADD;//运算符
-    rtbd.RenderTargetWriteMask = D3D10_COLOR_WRITE_ENABLE_ALL;//RGBA四个都启用
-    blendDesc.AlphaToCoverageEnable = false;//取消A2C
+    rtbd.BlendOp = D3D11_BLEND_OP_ADD;                         //运算符
+    rtbd.SrcBlendAlpha = D3D11_BLEND_ONE;                      //原数据(1,1,1,1)白色
+    rtbd.DestBlendAlpha = D3D11_BLEND_ZERO;                    //原数据(0,0,0,0)黑色
+    rtbd.BlendOpAlpha = D3D11_BLEND_OP_ADD;                    //运算符
+    rtbd.RenderTargetWriteMask = D3D10_COLOR_WRITE_ENABLE_ALL; //RGBA四个都启用
+    blendDesc.AlphaToCoverageEnable = false;                   //取消A2C
     blendDesc.RenderTarget[0] = rtbd;
     D3d11Device->CreateBlendState(&blendDesc, &Transparency);
     /*
@@ -753,23 +780,21 @@ bool InitializeScene()
     ZeroMemory(&cmDesc, sizeof(cmDesc));
     cmDesc.FillMode = D3D11_FILL_SOLID;
     cmDesc.CullMode = D3D11_CULL_BACK;
-    cmDesc.FrontCounterClockwise = true;//逆时针
+    cmDesc.FrontCounterClockwise = true; //逆时针
     hr = D3d11Device->CreateRasterizerState(&cmDesc, &CCWcullMode);
     /* tutorial11: CCWcullMode创建测试单元开始 */
     if (FAILED(hr))
     {
-        MessageBox(NULL, DXGetErrorDescription(hr),
-            TEXT("逆时针光栅状态"), MB_OK);
+        MessageBox(NULL, DXGetErrorDescription(hr), TEXT("逆时针光栅状态"), MB_OK);
         return 0;
     }
     /* CCWcullMode创建测试单元结束 */
-    cmDesc.FrontCounterClockwise = false;//顺时针
+    cmDesc.FrontCounterClockwise = false; //顺时针
     hr = D3d11Device->CreateRasterizerState(&cmDesc, &CWcullMode);
     /* tutorial11: CWcullMode创建测试单元开始 */
     if (FAILED(hr))
     {
-        MessageBox(NULL, DXGetErrorDescription(hr),
-            TEXT("顺时针光栅状态"), MB_OK);
+        MessageBox(NULL, DXGetErrorDescription(hr), TEXT("顺时针光栅状态"), MB_OK);
         return 0;
     }
     /* CWcullMode创建测试单元结束 */
@@ -785,24 +810,25 @@ bool InitializeScene()
 }
 
 //tutorial8: 更新正方体围绕另一个自旋的正方体旋转
-void UpdateScene()
+void UpdateScene(double time)
 {
     //保证正方体旋转
-    rot += .0005f;
-    if (rot > 6.28)//大于2pi, 角度归零
+    //tutorial14: 新增物体旋转与时间关联, 防止不同FPS值下物体转速不同
+    rot += 1.0f * time;
+    if (rot > 6.28) //大于2pi, 角度归零
         rot = 0.0f;
     //重置正方体1
     cube1World = XMMatrixIdentity();
     //设定正方体1的世界空间矩阵
-    XMVECTOR rotationAxis = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);//旋转方向(向量), y轴
-    Rotation = XMMatrixRotationAxis(rotationAxis, rot);//旋转矩阵
-    Translation = XMMatrixTranslation(0.0f, 0.0f, 4.0f);//平移矩阵
+    XMVECTOR rotationAxis = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f); //旋转方向(向量), y轴
+    Rotation = XMMatrixRotationAxis(rotationAxis, rot);          //旋转矩阵
+    Translation = XMMatrixTranslation(0.0f, 0.0f, 4.0f);         //平移矩阵
     cube1World = Translation * Rotation;
     //重置正方体2
     cube2World = XMMatrixIdentity();
     //设定正方体1的世界空间矩阵
     Rotation = XMMatrixRotationAxis(rotationAxis, -rot);
-    Scale = XMMatrixScaling(1.3f, 1.3f, 1.3f);//缩放
+    Scale = XMMatrixScaling(1.3f, 1.3f, 1.3f); //缩放
     cube2World = Rotation * Scale;
 
     /*
@@ -819,7 +845,6 @@ void UpdateScene()
     if (blue >= 1.0f || blue <= 0.0f)
         colormodb *= -1;
     */
-
 }
 
 /*
@@ -829,8 +854,8 @@ tutorial8:
 void DrawScene()
 {
     //背景颜色清空
-    float bgColor[4] = { (0.0f, 0.0f, 0.0f, 0.0f) };//背景颜色初始化为黑
-    D3d11DeviceContent->ClearRenderTargetView(RenderTargetView, bgColor);//背景颜色清空
+    float bgColor[4] = { (0.0f, 0.0f, 0.0f, 0.0f) };                        //背景颜色初始化为黑
+    D3d11DeviceContent->ClearRenderTargetView(RenderTargetView, bgColor); //背景颜色清空
 
     //tutorial6: 刷新深度模板视图
     D3d11DeviceContent->ClearDepthStencilView(depthStencilView,
@@ -839,10 +864,9 @@ void DrawScene()
 
     //tutorial13: 新增 渲染正方形之前, 绑定正确的顶点与索引缓存, 由于tutorial13创建了新的
     D3d11DeviceContent->IASetIndexBuffer(squareIndexBuffer, DXGI_FORMAT_R32_UINT, 0);
-    UINT stride = sizeof(Vertex);//顶点大小
-    UINT offset = 0;//偏移量
+    UINT stride = sizeof(Vertex); //顶点大小
+    UINT offset = 0;              //偏移量
     D3d11DeviceContent->IAGetVertexBuffers(0, 1, &squareVertexBuffer, &stride, &offset);
-
 
     //tutorial12: 先默认渲染, 然后无背面剔除渲染
     //tutorial13: 去除渲染部分, 在renderText中已经实现
@@ -887,9 +911,9 @@ void DrawScene()
     //tutorial7: 定义世界空间转换矩阵与WVP矩阵
     //tutorial8: 绘制cube1
     //worldSpace = XMMatrixIdentity();//返回一个空矩阵, tutorial8: cube1World与cube2World代替
-    WVP = cube1World * cameraView * cameraProjection;//一个空间转换公式
+    WVP = cube1World * cameraView * cameraProjection; //一个空间转换公式
     //tutorial7: 更新常量缓存
-    cbPerObj.WVP = XMMatrixTranspose(WVP);//矩阵转置
+    cbPerObj.WVP = XMMatrixTranspose(WVP); //矩阵转置
     D3d11DeviceContent->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
     D3d11DeviceContent->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
 
@@ -916,7 +940,7 @@ void DrawScene()
 
     //tutorial8: 绘制cube2
     WVP = cube2World * cameraView * cameraProjection;
-    cbPerObj.WVP = XMMatrixTranspose(WVP);//矩阵转置
+    cbPerObj.WVP = XMMatrixTranspose(WVP); //矩阵转置
     D3d11DeviceContent->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
     D3d11DeviceContent->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
     //tutorial10: 向像素着色器发送纹理信息与纹理采样状态信息
@@ -934,7 +958,7 @@ void DrawScene()
     D3d11DeviceContent->DrawIndexed(36, 0, 0);
 
     //tutorial13: 新增 正方体渲染完毕后, 开始渲染字体
-    RenderText(L"Hello World!");
+    RenderText(L"FPS: ", fps);
 
     //交换链将前置缓存映射到显示器, 即图像呈现
     SwapChain->Present(0, 0);
@@ -944,7 +968,7 @@ void DrawScene()
 tutorial13:
     新增D2D D3D10 DWrite设备初始化, 通过共享表面的方式进行文字渲染
 */
-bool InitialD2D_D3D10_DWrite(IDXGIAdapter1* Adapter)
+bool InitialD2D_D3D10_DWrite(IDXGIAdapter1 *Adapter)
 {
     //tutorial13: 新增D3D10.1设备初始化
     hr = D3D10CreateDevice1(Adapter, D3D10_DRIVER_TYPE_HARDWARE, NULL,
@@ -966,24 +990,24 @@ bool InitialD2D_D3D10_DWrite(IDXGIAdapter1* Adapter)
     hr = D3d11Device->CreateTexture2D(&SharedTextureDesc, NULL, &SharedTexture11);
 
     //tutorial13: 新增 获取共享纹理的信号量IDXGIKeyedMutex
-    hr = SharedTexture11->QueryInterface(__uuidof(IDXGIKeyedMutex), (void**)&KeyedMutexD3d11);
+    hr = SharedTexture11->QueryInterface(__uuidof(IDXGIKeyedMutex), (void **)&KeyedMutexD3d11);
 
     //tutorial13: 新增 通过DXGI创建D3D10设备可以访问的D3D11纹理句柄交互
-    IDXGIResource* SharedResource10;
+    IDXGIResource *SharedResource10;
     HANDLE SharedHandle10;
-    hr = SharedTexture11->QueryInterface(__uuidof(IDXGIResource), (void**)&SharedResource10);
-    hr = SharedResource10->GetSharedHandle(&SharedHandle10);//可访问的句柄
+    hr = SharedTexture11->QueryInterface(__uuidof(IDXGIResource), (void **)&SharedResource10);
+    hr = SharedResource10->GetSharedHandle(&SharedHandle10); //可访问的句柄
     SharedResource10->Release();
 
     //tutorial13: 新增 为D3D10设备访问D3D11纹理增加互斥信号量(访问共享表面)
-    IDXGISurface1* SharedSurface10;
+    IDXGISurface1 *SharedSurface10;
     hr = D3d10Device->OpenSharedResource(SharedHandle10,
-        __uuidof(IDXGISurface1), (void**)&SharedSurface10);
-    hr = SharedSurface10->QueryInterface(__uuidof(IDXGIKeyedMutex), (void**)&KeyedMutexD3d10);
+        __uuidof(IDXGISurface1), (void **)&SharedSurface10);
+    hr = SharedSurface10->QueryInterface(__uuidof(IDXGIKeyedMutex), (void **)&KeyedMutexD3d10);
 
     //tutorial13: 新增 通过D2DFactory创建D2D资源
-    ID2D1Factory* D2dFactory;
-    hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory), (void**)&D2dFactory);
+    ID2D1Factory *D2dFactory;
+    hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory), (void **)&D2dFactory);
 
     /*
     tutorial13: 新增
@@ -1015,18 +1039,17 @@ bool InitialD2D_D3D10_DWrite(IDXGIAdapter1* Adapter)
     hr = DWriteCreateFactory(
         DWRITE_FACTORY_TYPE_SHARED,
         __uuidof(IDWriteFactory),
-        reinterpret_cast<IUnknown**>(&DWriteFactory));
+        reinterpret_cast<IUnknown **>(&DWriteFactory));
 
     //tutorial13: 新增 字体格式
     hr = DWriteFactory->CreateTextFormat(
         L"Script", NULL,
         DWRITE_FONT_WEIGHT_REGULAR, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-        44.0f, L"en-us", &TextFormat
-    );
+        44.0f, L"en-us", &TextFormat);
 
     //tutorial13: 新增 字体排列设置
-    hr = TextFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);//水平方向左对齐
-    hr = TextFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);//竖直方向顶端对齐
+    hr = TextFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);        //水平方向左对齐
+    hr = TextFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR); //竖直方向顶端对齐
 
     //tutorial13: 新增 防止Debug报警告D3D10设备图元设置
     D3d10Device->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_LINELIST);
@@ -1047,13 +1070,17 @@ void InitialD2DScreenTexture()
     Vertex v[] =
     {
         Vertex(-1.0f, -1.0f, -1.0f, 0.0f, 1.0f),
-        Vertex(-1.0f,  1.0f, -1.0f, 0.0f, 0.0f),
-        Vertex(1.0f,  1.0f, -1.0f, 1.0f, 0.0f),
+        Vertex(-1.0f, 1.0f, -1.0f, 0.0f, 0.0f),
+        Vertex(1.0f, 1.0f, -1.0f, 1.0f, 0.0f),
         Vertex(1.0f, -1.0f, -1.0f, 1.0f, 1.0f),
     };
     DWORD indices[] = {
-    0,  1,  2,
-    0,  2,  3,
+        0,
+        1,
+        2,
+        0,
+        2,
+        3,
     };
     D3D11_BUFFER_DESC indexBufferDesc;
     ZeroMemory(&indexBufferDesc, sizeof(indexBufferDesc));
@@ -1083,17 +1110,18 @@ void InitialD2DScreenTexture()
 }
 
 //tutorial13: 新增 渲染文字
-void RenderText(std::wstring text)
+void RenderText(std::wstring text, int inInt)
 {
     //tutorial13: 新增 D3D11设备先释放共享纹理使得D3D10设备能够接触(互斥)
     KeyedMutexD3d11->ReleaseSync(0);
-    KeyedMutexD3d10->AcquireSync(0, 5);//至少接触5ms
+    KeyedMutexD3d10->AcquireSync(0, 5); //至少接触5ms
     //tutorial13: 新增 D3D10设备接触后, D2D目标开始渲染并清空背景, alpha=0全透
     D2dRenderTarget->BeginDraw();
     D2dRenderTarget->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f));
     //tutorial13: 新增 用于输出到屏幕上的字符串
     std::wostringstream printString;
-    printString << text;
+    //tutorial14: 修改 新增FPS值的显示
+    printString << text << inInt;
     printText = printString.str();
     //tutorial13: 新增 字体颜色, 并赋予给笔刷
     D2D1_COLOR_F fontColor = D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f);
@@ -1102,8 +1130,7 @@ void RenderText(std::wstring text)
     D2D1_RECT_F layoutRect = D2D1::RectF(0, 0, WIDTH, HEIGHT);
     //tutorial13: 新增 绘制文字后, 结束绘制
     D2dRenderTarget->DrawTextW(
-        printText.c_str(), wcslen(printText.c_str()), TextFormat, layoutRect, ColorBrush
-    );
+        printText.c_str(), wcslen(printText.c_str()), TextFormat, layoutRect, ColorBrush);
     D2dRenderTarget->EndDraw();
     //tutorial13: 新增 D3D10设备用完后挂起 D3D11唤醒
     KeyedMutexD3d10->ReleaseSync(1);
@@ -1113,11 +1140,11 @@ void RenderText(std::wstring text)
     //tutorial13: 新增 D2D的索引缓存与IA绑定
     D3d11DeviceContent->IASetIndexBuffer(D2dIndexBuffer, DXGI_FORMAT_R32_UINT, 0);
     //tutorial13: 新增 D2D顶点缓存绑定IA
-    UINT stride = sizeof(Vertex);//顶点大小
-    UINT offset = 0;//偏移量
+    UINT stride = sizeof(Vertex); //顶点大小
+    UINT offset = 0;              //偏移量
     D3d11DeviceContent->IAGetVertexBuffers(0, 1, &D2dVertexBuffer, &stride, &offset);
     //tutorial13: 新增 更改WVP矩阵
-    WVP = XMMatrixIdentity();//重置矩阵
+    WVP = XMMatrixIdentity(); //重置矩阵
     cbPerObj.WVP = XMMatrixTranspose(WVP);
     D3d11DeviceContent->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
     D3d11DeviceContent->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
@@ -1125,7 +1152,43 @@ void RenderText(std::wstring text)
     D3d11DeviceContent->PSSetShaderResources(0, 1, &D2dTexture);
     D3d11DeviceContent->PSGetSamplers(0, 1, &CubeTextureSampleState);
     //tutorial13: 新增 渲染正方形
-    D3d11DeviceContent->RSSetState(CWcullMode);//顺时针渲染, 剔除背面
+    D3d11DeviceContent->RSSetState(CWcullMode); //顺时针渲染, 剔除背面
     D3d11DeviceContent->DrawIndexed(6, 0, 0);
+}
+
+//tutorial14: 新增 启动计时器
+void StartTimer()
+{
+    LARGE_INTEGER frequencyCount;
+    QueryPerformanceFrequency(&frequencyCount);
+
+    CountsPerSecond = double(frequencyCount.QuadPart);
+
+    QueryPerformanceCounter(&frequencyCount);
+    CounterStart = frequencyCount.QuadPart;
+}
+
+//tutorial14: 新增 得到计时器开始后经过的时间
+double GetTime()
+{
+    LARGE_INTEGER currentTime;
+    QueryPerformanceCounter(&currentTime);
+    return double(currentTime.QuadPart - CounterStart) / CountsPerSecond;
+}
+
+//tutorial14: 新增 计算每帧时间
+double GetFrameTime()
+{
+    LARGE_INTEGER currentTime;
+    __int64 tickCount;
+    QueryPerformanceCounter(&currentTime);
+
+    tickCount = currentTime.QuadPart - FrameTimeOld;
+    FrameTimeOld = currentTime.QuadPart;
+
+    if (tickCount < 0.0f)
+        tickCount = 0.0f;
+
+    return float(tickCount) / CountsPerSecond;
 }
 /* ** 函数实现 ** */

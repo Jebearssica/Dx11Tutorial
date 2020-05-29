@@ -1,0 +1,43 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "shell",
+      "label": "shell: cl.exe build active file",
+      "command": "cl.exe",
+      "args": [
+        //头文件路径
+        "/I'C:/Program Files (x86)/Microsoft DirectX SDK (June 2010)/Include'",
+        "${file}",
+        "/Zi",
+        "/EHsc",
+        "/Fo:${fileDirname}\\${fileBasenameNoExtension}.obj", //目标文件
+        "/Fe:",
+        "${fileDirname}\\${fileBasenameNoExtension}.exe",
+        //库文件路径
+        "/link", //链接标志
+        "/libpath:'C:/Program Files (x86)/Microsoft DirectX SDK (June 2010)/Lib/x64'",
+        "/libpath:'C:/Program Files (x86)/Microsoft DirectX SDK (June 2010)/Lib/x86'"
+      ],
+      "problemMatcher": [
+        "$msCompile"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "type": "shell",
+      "label": "cl.exe build active file",
+      "command": "cl.exe",
+      "args": [
+        "/Zi",
+        "/EHsc",
+        "/Fe:",
+        "${fileDirname}\\${fileBasenameNoExtension}.exe",
+        "${file}"
+      ]
+    }
+  ]
+}
