@@ -53,22 +53,32 @@ ID3D11InputLayout *vertexLayout; //顶点输入布局
 /*
 tutorial10:
     删除颜色属性, 替换为纹理属性
+tutorial15: 修改
+    新增法线属性
 */
 struct Vertex //顶点结构
 {
     Vertex() {}
     //tutorial4: 增加RGBA颜色元素, tutorial10: 替换为纹理属性
-    Vertex(float x, float y, float z,
-        float u, float v) : position(x, y, z), textureCoord(u, v) {}
+    Vertex(
+        float x, float y, float z,
+        float u, float v,
+        float nx, float ny, float nz) : position(x, y, z), textureCoord(u, v), normal(nx, ny, nz) {}
 
     XMFLOAT3 position;
     XMFLOAT2 textureCoord;
+    XMFLOAT3 normal;
 };
-//输入布局, tutorial10: 根据顶点结构修改
+/*输入布局
+tutorial10: 根据顶点结构修改
+tutorial15: 修改
+    新增法线传递
+*/
 D3D11_INPUT_ELEMENT_DESC layout[] =
 {
     {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
     {"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0}, //偏移量
+    {"NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 20, D3D11_INPUT_PER_VERTEX_DATA, 0},
 };
 UINT numElements = ARRAYSIZE(layout); //保存布局数组的大小
 
@@ -93,9 +103,11 @@ XMVECTOR cameraPosition;
 XMVECTOR cameraTarget;
 XMVECTOR cameraUp; //摄像机的向上方向, 可见Note中的 视图空间(view space)
 //tutorial7: 增加常量缓存结构
+//tutorial15: 修改 增加世界矩阵用于计算光源
 struct cbPerObject
 {
     XMMATRIX WVP;
+    XMMATRIX World;
 };
 cbPerObject cbPerObj;
 
@@ -161,6 +173,27 @@ int fps = 0;
 
 __int64 FrameTimeOld = 0;
 double FrameTime;
+
+//tutorial15: 新增 传递给像素着色器的缓存
+ID3D11Buffer* cbPerFrameBuffer;
+struct Light
+{
+    Light()
+    {
+        ZeroMemory(this,sizeof(Light));
+    }
+    XMFLOAT3 direction;//方向
+    float pad;//填充: HLSL将结构打包成4D向量, 不允许在两个4D向量之间拆分单个变量, 此处直接构造与之前的3D向量合并成4D向量被打包
+    XMFLOAT4 ambient;//环境光
+    XMFLOAT4 diffuse;//漫反射
+};
+Light light;
+struct cbPerFrame
+{
+    Light light;
+};
+
+cbPerFrame constBufferPerFrame;
 
 /* ** 全局变量 ** */
 
@@ -392,25 +425,7 @@ bool InitializeDirect3dApp(HINSTANCE hInstance)
     //ID3D11Texture2D* BackBuffer;
     hr = SwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **)&BackBuffer11);
     hr = D3d11Device->CreateRenderTargetView(BackBuffer11, NULL, &RenderTargetView);
-    ////添加错误抛出
-    //if (FAILED(hr))
-    //{
-    //    MessageBox(NULL, DXGetErrorDescription(hr),
-    //        TEXT("SwapChain->GetBuffer()"), MB_OK);
-    //    return 0;
-    //}
-
-    ////创建渲染目标
-    //hr = D3d11Device->CreateRenderTargetView(BackBuffer, NULL, &RenderTargetView);
-    //BackBuffer->Release();//后置缓存使用完毕,直接回收
-    ////添加错误抛出
-    //if (FAILED(hr))
-    //{
-    //    MessageBox(NULL, DXGetErrorDescription(hr),
-    //        TEXT("D3d11Device->CreateRenderTargetView()"), MB_OK);
-    //    return 0;
-    //}
-
+    
     //tutorial6: 添加深度模板缓存描述及初始化
     D3D11_TEXTURE2D_DESC depthStencilDesc;
     depthStencilDesc.Width = WIDTH;
@@ -487,8 +502,8 @@ void ReleaseObjects()
     noCull->Release();
 
     /*
-    tutorial13:
-        新增 新增的全局变量的释放
+    tutorial13:新增
+        新增的全局变量的释放
     */
     D3d10Device->Release();
     KeyedMutexD3d10->Release();
@@ -502,6 +517,11 @@ void ReleaseObjects()
     D2dTexture->Release();
     DWriteFactory->Release();
     TextFormat->Release();
+    /*
+    tutorial15: 新增
+        传递给PS的缓存释放
+    */
+    cbPerFrameBuffer->Release();
 }
 
 //在这里放置物体,贴图,加载模型,音乐
@@ -521,6 +541,15 @@ bool InitializeScene()
     //着色器设置
     D3d11DeviceContent->VSSetShader(VS, 0, 0);
     D3d11DeviceContent->PSSetShader(PS, 0, 0);
+
+    /*
+    tutorial15: 新增
+        光线的初始化, 一个白光+黑暗环境
+    */
+    light.direction = XMFLOAT3(0.25f, 0.5f, -1.0f);
+    light.ambient = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f);
+    light.diffuse = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+
     //顶点集合创建, tutorial4: 增加RGBA颜色元素
     /*
     tutorial5:
@@ -530,44 +559,46 @@ bool InitializeScene()
     tutorial10:
         由于顶点结构属性变换(纹理替换颜色), 此处的顶点集合创建也要变化
         由于确保每个面贴图都要渲染正确, 因此一共6*4个顶点都要加入(即使有重复)
+    tutorial15: 修改
+        新增法线信息初始化(一般情况导出模型都会有这些信息)
     */
     Vertex v[] =
     {
         // Front Face
-        Vertex(-1.0f, -1.0f, -1.0f, 0.0f, 1.0f),
-        Vertex(-1.0f, 1.0f, -1.0f, 0.0f, 0.0f),
-        Vertex(1.0f, 1.0f, -1.0f, 1.0f, 0.0f),
-        Vertex(1.0f, -1.0f, -1.0f, 1.0f, 1.0f),
+        Vertex(-1.0f, -1.0f, -1.0f, 0.0f, 1.0f, -1.0f, -1.0f, -1.0f),
+        Vertex(-1.0f, 1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f, -1.0f),
+        Vertex(1.0f, 1.0f, -1.0f, 1.0f, 0.0f, 1.0f, 1.0f, -1.0f),
+        Vertex(1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, -1.0f, -1.0f),
 
         // Back Face
-        Vertex(-1.0f, -1.0f, 1.0f, 1.0f, 1.0f),
-        Vertex(1.0f, -1.0f, 1.0f, 0.0f, 1.0f),
-        Vertex(1.0f, 1.0f, 1.0f, 0.0f, 0.0f),
-        Vertex(-1.0f, 1.0f, 1.0f, 1.0f, 0.0f),
+        Vertex(-1.0f, -1.0f, 1.0f, 1.0f, 1.0f, -1.0f, -1.0f, 1.0f),
+        Vertex(1.0f, -1.0f, 1.0f, 0.0f, 1.0f, 1.0f, -1.0f, 1.0f),
+        Vertex(1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f),
+        Vertex(-1.0f, 1.0f, 1.0f, 1.0f, 0.0f, -1.0f, 1.0f, 1.0f),
 
         // Top Face
-        Vertex(-1.0f, 1.0f, -1.0f, 0.0f, 1.0f),
-        Vertex(-1.0f, 1.0f, 1.0f, 0.0f, 0.0f),
-        Vertex(1.0f, 1.0f, 1.0f, 1.0f, 0.0f),
-        Vertex(1.0f, 1.0f, -1.0f, 1.0f, 1.0f),
+        Vertex(-1.0f, 1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 1.0f, -1.0f),
+        Vertex(-1.0f, 1.0f, 1.0f, 0.0f, 0.0f, -1.0f, 1.0f, 1.0f),
+        Vertex(1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f),
+        Vertex(1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 1.0f, 1.0f, -1.0f),
 
         // Bottom Face
-        Vertex(-1.0f, -1.0f, -1.0f, 1.0f, 1.0f),
-        Vertex(1.0f, -1.0f, -1.0f, 0.0f, 1.0f),
-        Vertex(1.0f, -1.0f, 1.0f, 0.0f, 0.0f),
-        Vertex(-1.0f, -1.0f, 1.0f, 1.0f, 0.0f),
+        Vertex(-1.0f, -1.0f, -1.0f, 1.0f, 1.0f, -1.0f, -1.0f, -1.0f),
+        Vertex(1.0f, -1.0f, -1.0f, 0.0f, 1.0f, 1.0f, -1.0f, -1.0f),
+        Vertex(1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 1.0f, -1.0f, 1.0f),
+        Vertex(-1.0f, -1.0f, 1.0f, 1.0f, 0.0f, -1.0f, -1.0f, 1.0f),
 
         // Left Face
-        Vertex(-1.0f, -1.0f, 1.0f, 0.0f, 1.0f),
-        Vertex(-1.0f, 1.0f, 1.0f, 0.0f, 0.0f),
-        Vertex(-1.0f, 1.0f, -1.0f, 1.0f, 0.0f),
-        Vertex(-1.0f, -1.0f, -1.0f, 1.0f, 1.0f),
+        Vertex(-1.0f, -1.0f, 1.0f, 0.0f, 1.0f, -1.0f, -1.0f, 1.0f),
+        Vertex(-1.0f, 1.0f, 1.0f, 0.0f, 0.0f, -1.0f, 1.0f, 1.0f),
+        Vertex(-1.0f, 1.0f, -1.0f, 1.0f, 0.0f, -1.0f, 1.0f, -1.0f),
+        Vertex(-1.0f, -1.0f, -1.0f, 1.0f, 1.0f, -1.0f, -1.0f, -1.0f),
 
         // Right Face
-        Vertex(1.0f, -1.0f, -1.0f, 0.0f, 1.0f),
-        Vertex(1.0f, 1.0f, -1.0f, 0.0f, 0.0f),
-        Vertex(1.0f, 1.0f, 1.0f, 1.0f, 0.0f),
-        Vertex(1.0f, -1.0f, 1.0f, 1.0f, 1.0f),
+        Vertex(1.0f, -1.0f, -1.0f, 0.0f, 1.0f, 1.0f, -1.0f, -1.0f),
+        Vertex(1.0f, 1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 1.0f, -1.0f),
+        Vertex(1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f),
+        Vertex(1.0f, -1.0f, 1.0f, 1.0f, 1.0f, 1.0f, -1.0f, 1.0f),
     };
     /*
     tutorial5:
@@ -649,11 +680,9 @@ bool InitializeScene()
     //顶点缓存设置
     UINT stride = sizeof(Vertex); //顶点大小
     UINT offset = 0;              //偏移量
-    D3d11DeviceContent->IASetVertexBuffers(0, 1,
-        &squareVertexBuffer, &stride, &offset); //顶点缓存与IA绑定
-//顶点输入布局
-    hr = D3d11Device->CreateInputLayout(layout, numElements,
-        VS_Buffer->GetBufferPointer(), VS_Buffer->GetBufferSize(), &vertexLayout);
+    D3d11DeviceContent->IASetVertexBuffers(0, 1, &squareVertexBuffer, &stride, &offset); //顶点缓存与IA绑定
+    //顶点输入布局
+    hr = D3d11Device->CreateInputLayout(layout, numElements, VS_Buffer->GetBufferPointer(), VS_Buffer->GetBufferSize(), &vertexLayout);
     //顶点输入布局与IA绑定
     D3d11DeviceContent->IASetInputLayout(vertexLayout);
     //图元拓扑设置, 三角形带传输
@@ -681,7 +710,6 @@ bool InitializeScene()
     cbBufferDesc.CPUAccessFlags = 0;
     cbBufferDesc.MiscFlags = 0;
     hr = D3d11Device->CreateBuffer(&cbBufferDesc, NULL, &cbPerObjectBuffer);
-
     /* tutorial7: cbPerObjectBuffer创建测试单元开始 */
     if (FAILED(hr))
     {
@@ -690,6 +718,18 @@ bool InitializeScene()
         return 0;
     }
     /* cbPerObjectBuffer创建测试单元结束 */
+
+    /*
+    tutorial15: 新增
+        创建cbPerFrameBuffer
+    */
+    ZeroMemory(&cbBufferDesc,sizeof(cbBufferDesc));//清空描述
+    cbBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+    cbBufferDesc.ByteWidth = sizeof(cbPerFrame);
+    cbBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    cbBufferDesc.CPUAccessFlags = 0;
+    cbBufferDesc.MiscFlags = 0;
+    hr = D3d11Device->CreateBuffer(&cbBufferDesc, NULL, &cbPerFrameBuffer);
 
     /*
     tutorial7:
@@ -712,13 +752,6 @@ bool InitializeScene()
     wireFrameDesc.FillMode = D3D11_FILL_SOLID; //tutorial10: 为了加载贴图将线框渲染改为实体渲染
     wireFrameDesc.CullMode = D3D11_CULL_NONE;
     hr = D3d11Device->CreateRasterizerState(&wireFrameDesc, &WireFrame);
-    /* tutorial9: WireFrame创建测试单元开始 */
-    //if (FAILED(hr))
-    //{
-    //    MessageBox(NULL, DXGetErrorDescription(hr), TEXT("创建光栅状态"), MB_OK);
-    //    return 0;
-    //}
-    /* WireFrame创建测试单元结束 */
     D3d11DeviceContent->RSSetState(WireFrame);
 
     //tutorial10: 从文件中加载纹理
@@ -742,13 +775,6 @@ bool InitializeScene()
     sampleDesc.MinLOD = 0;
     sampleDesc.MaxLOD = D3D11_FLOAT32_MAX;
     hr = D3d11Device->CreateSamplerState(&sampleDesc, &CubeTextureSampleState);
-    /* tutorial10: CubeTextureSampleState创建测试单元开始 */
-    //if (FAILED(hr))
-    //{
-    //    MessageBox(NULL, DXGetErrorDescription(hr), TEXT("纹理采样状态"), MB_OK);
-    //    return 0;
-    //}
-    /* CubeTextureSampleState创建测试单元结束 */
 
     //tutorial11: 新增混合方程描述
     D3D11_BLEND_DESC blendDesc;
@@ -830,21 +856,6 @@ void UpdateScene(double time)
     Rotation = XMMatrixRotationAxis(rotationAxis, -rot);
     Scale = XMMatrixScaling(1.3f, 1.3f, 1.3f); //缩放
     cube2World = Rotation * Scale;
-
-    /*
-    旧内容
-    //改变背景色,反正搞不懂rgb色彩调整
-    red += colormodr * 0.00005f;
-    green += colormodg * 0.00002f;
-    blue += colormodb * 0.00001f;
-
-    if (red >= 1.0f || red <= 0.0f)
-        colormodr *= -1;
-    if (green >= 1.0f || green <= 0.0f)
-        colormodg *= -1;
-    if (blue >= 1.0f || blue <= 0.0f)
-        colormodb *= -1;
-    */
 }
 
 /*
@@ -862,56 +873,25 @@ void DrawScene()
         D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL,
         1.0f, 0);
 
+    //tutorial15: 新增 将光线数据传递给PS中的常量缓存
+    constBufferPerFrame.light = light;
+    D3d11DeviceContent->UpdateSubresource(cbPerFrameBuffer, 0, NULL, &constBufferPerFrame, 0, 0);
+    D3d11DeviceContent->PSSetConstantBuffers(0, 1, &cbPerFrameBuffer);
+
     //tutorial13: 新增 渲染正方形之前, 绑定正确的顶点与索引缓存, 由于tutorial13创建了新的
     D3d11DeviceContent->IASetIndexBuffer(squareIndexBuffer, DXGI_FORMAT_R32_UINT, 0);
     UINT stride = sizeof(Vertex); //顶点大小
     UINT offset = 0;              //偏移量
     D3d11DeviceContent->IAGetVertexBuffers(0, 1, &squareVertexBuffer, &stride, &offset);
 
-    //tutorial12: 先默认渲染, 然后无背面剔除渲染
-    //tutorial13: 去除渲染部分, 在renderText中已经实现
-    //D3d11DeviceContent->RSSetState(NULL);//null为默认
-    //D3d11DeviceContent->RSSetState(noCull);
-
-    //tutorial12: 产生裁切效果因此禁用混合效果
-    ////tutorial11: 新增混合因子, 新增混合状态与OM绑定
-    //float blendFactor[] = { 0.75f,0.75f,0.75f,1.0f };//混合因子RGB中25%透明
-    //D3d11DeviceContent->OMSetBlendState(0, 0, 0xffffffff);//禁用混合状态用于绘制不透明对象
-    ///*    渲染不透明对象代码   */
-    //D3d11DeviceContent->OMSetBlendState(Transparency, blendFactor, 0xffffffff);//启用混合状态用于绘制透明对象
-    ///*    渲染透明对象代码   */
-
-    ///*
-    //tutorial11:
-    //    新增判断两个正方体的位置关系, 从而使得渲染关系不会出错, 从而导致融合出问题(先渲染远离摄像机的)
-    //*/
-    //XMVECTOR cubePosition = XMVectorZero();//向量清零
-    ////获取正方体1位置与摄像机位置的距离
-    //cubePosition = XMVector3TransformCoord(cubePosition, cube1World);//通过正方体1的世界矩阵获得位置
-    //float distX = XMVectorGetX(cubePosition) - XMVectorGetX(cameraPosition);
-    //float distY = XMVectorGetY(cubePosition) - XMVectorGetY(cameraPosition);
-    //float distZ = XMVectorGetZ(cubePosition) - XMVectorGetZ(cameraPosition);
-    //float cube1Distance = distX * distX + distY * distY + distZ * distZ;//只是比较, 无需sqrt得到正确的值, 降低性能损失
-    //cubePosition = XMVectorZero();//向量清零
-    ////获取正方体2位置与摄像机位置的距离
-    //cubePosition = XMVector3TransformCoord(cubePosition, cube2World);//通过正方体2的世界矩阵获得位置
-    //distX = XMVectorGetX(cubePosition) - XMVectorGetX(cameraPosition);
-    //distY = XMVectorGetY(cubePosition) - XMVectorGetY(cameraPosition);
-    //distZ = XMVectorGetZ(cubePosition) - XMVectorGetZ(cameraPosition);
-    //float cube2Distance = distX * distX + distY * distY + distZ * distZ;
-    ////由于两个正方体完全相同, 因此想要获得离得更远的世界矩阵, 比较后, 直接两者互换即可
-    //if (cube1Distance < cube2Distance)
-    //{
-    //    XMMATRIX tempMatrix = cube1World;
-    //    cube1World = cube2World;
-    //    cube2World = tempMatrix;//这样cube1World就是离得更远更先渲染的正方体
-    //}
-    /*    tutorial12: 禁用混合效果结束   */
-
     //tutorial7: 定义世界空间转换矩阵与WVP矩阵
     //tutorial8: 绘制cube1
     //worldSpace = XMMatrixIdentity();//返回一个空矩阵, tutorial8: cube1World与cube2World代替
     WVP = cube1World * cameraView * cameraProjection; //一个空间转换公式
+
+    //tutorial15: 新增 使用世界矩阵来变换物体的法线信息, 使得光照效果正常
+    cbPerObj.World = XMMatrixTranspose(cube1World);
+
     //tutorial7: 更新常量缓存
     cbPerObj.WVP = XMMatrixTranspose(WVP); //矩阵转置
     D3d11DeviceContent->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
@@ -921,9 +901,8 @@ void DrawScene()
     D3d11DeviceContent->PSSetShaderResources(0, 1, &CubeTexture);
     D3d11DeviceContent->PSSetSamplers(0, 1, &CubeTextureSampleState);
 
-    //tutorial11: 先逆时针剔除, 以获得正面
-    //tutorial12: 禁用混合效果
-    //D3d11DeviceContent->RSSetState(CCWcullMode);
+    //tutorial15: 重写 剔除背面
+    D3d11DeviceContent->RSSetState(CWcullMode);
 
     /*
     tutorial5:
@@ -933,13 +912,12 @@ void DrawScene()
     */
     D3d11DeviceContent->DrawIndexed(36, 0, 0);
 
-    //tutorial11: 顺时针剔除, 以获得背面
-    //tutorial12: 禁用混合效果
-    //D3d11DeviceContent->RSSetState(CWcullMode);
-    //D3d11DeviceContent->DrawIndexed(36, 0, 0);
-
     //tutorial8: 绘制cube2
     WVP = cube2World * cameraView * cameraProjection;
+
+    //tutorial15: 新增 使用世界矩阵来变换物体的法线信息, 使得光照效果正常
+    cbPerObj.World = XMMatrixTranspose(cube2World);
+
     cbPerObj.WVP = XMMatrixTranspose(WVP); //矩阵转置
     D3d11DeviceContent->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
     D3d11DeviceContent->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
@@ -951,10 +929,9 @@ void DrawScene()
     //tutorial11: 先逆时针剔除, 以获得正面
     //D3d11DeviceContent->RSSetState(CCWcullMode);
 
-    //D3d11DeviceContent->DrawIndexed(36, 0, 0);
-
-    ////tutorial11: 先逆时针剔除, 以获得正面
-    //D3d11DeviceContent->RSSetState(CWcullMode);
+    //tutorial11: 先逆时针剔除, 以获得正面
+    //tutorial15: 重写 剔除背面
+    D3d11DeviceContent->RSSetState(CWcullMode);
     D3d11DeviceContent->DrawIndexed(36, 0, 0);
 
     //tutorial13: 新增 正方体渲染完毕后, 开始渲染字体
@@ -1067,12 +1044,13 @@ tutorial13:
 void InitialD2DScreenTexture()
 {
     //tutorial13: 新增 覆盖场景的正方形的顶点与索引创建
+    //tutorial15: 修改 更新顶点的法线信息
     Vertex v[] =
     {
-        Vertex(-1.0f, -1.0f, -1.0f, 0.0f, 1.0f),
-        Vertex(-1.0f, 1.0f, -1.0f, 0.0f, 0.0f),
-        Vertex(1.0f, 1.0f, -1.0f, 1.0f, 0.0f),
-        Vertex(1.0f, -1.0f, -1.0f, 1.0f, 1.0f),
+        Vertex(-1.0f, -1.0f, -1.0f, 0.0f, 1.0f,-1.0f, -1.0f, -1.0f),
+        Vertex(-1.0f,  1.0f, -1.0f, 0.0f, 0.0f,-1.0f,  1.0f, -1.0f),
+        Vertex( 1.0f,  1.0f, -1.0f, 1.0f, 0.0f, 1.0f,  1.0f, -1.0f),
+        Vertex( 1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, -1.0f, -1.0f),
     };
     DWORD indices[] = {
         0,
@@ -1145,6 +1123,10 @@ void RenderText(std::wstring text, int inInt)
     D3d11DeviceContent->IAGetVertexBuffers(0, 1, &D2dVertexBuffer, &stride, &offset);
     //tutorial13: 新增 更改WVP矩阵
     WVP = XMMatrixIdentity(); //重置矩阵
+
+    //tutorial15: 新增 设置2D纹理世界矩阵
+    cbPerObj.World=XMMatrixTranspose(WVP);
+
     cbPerObj.WVP = XMMatrixTranspose(WVP);
     D3d11DeviceContent->UpdateSubresource(cbPerObjectBuffer, 0, NULL, &cbPerObj, 0, 0);
     D3d11DeviceContent->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);

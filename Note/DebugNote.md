@@ -86,9 +86,9 @@ git rebase --skip 跳过冲突, 将分支起始点移动到主干的起始点
 
 具体变基过程如下图所示
 
-![产生冲突][1]
-![变基][2]
-![回到主分支再次合并][3]
+![产生冲突](images/basic-rebase-1.png)
+![变基](images/basic-rebase-2.png)
+![回到主分支再次合并](images/basic-rebase-3.png)
 
 ## Tutorial4: Color!
 
@@ -196,6 +196,5 @@ UTF-8编码会使得VS编译报错, 建议全改成GB2312
 
 <https://www.cnblogs.com/cocos2d-x/archive/2012/02/26/2368873.html#commentform>
 
-[1]:images/basic-rebase-1.png
-[2]:images/basic-rebase-2.png
-[3]:images/basic-rebase-3.png
+## Tutorial15: Simple Lighting
+
