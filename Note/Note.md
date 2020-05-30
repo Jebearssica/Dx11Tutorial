@@ -65,7 +65,7 @@ D3D11_BUFFER_DESC vertexBufferDesc;
 ZeroMemory( &vertexBufferDesc, sizeof(vertexBufferDesc) );
 ```
 
-![十个管线流程][1]
+![十个管线流程](images/render-pipeline-stages.png)
 
 ### IA:Input Assembler
 
@@ -271,13 +271,13 @@ index = {1, 2, 3, 3, 2, 4};
   * 将“投影空间”渲染为几何图形, 它将看起来像是一个顶端被切掉的金字塔。 金字塔的尖端将是相机的位置, 尖端被切除的位置将是近z平面, 金字塔的基础将是远z平面。
   * 近平面和远平面由浮点值定义, 其他四个平面由长宽比和FOV（以弧度表示的视场）定义。
 
-![透视投影][2]
+![透视投影](images/projection-space.png)
 
 #### 视场角: FOV
 
 在摄影学中, 视角(angle of view)是在一般环境中, 相机可以接收影像的角度范围, 也可以常被称为视野。
 
-![FOV示意图][3]
+![FOV示意图](images/FOV.jpg)
 
 ### 屏幕空间(Screen space)
 
@@ -437,11 +437,11 @@ spaceWorld = Translation \* Rotation \* Scale
 * u, v都是相对图像的位置, 属于(0,1)
   * 即实际图像长度为256像素, 图像水平长度的一半也只有0.5
 
-![2D纹理的坐标][4]
+![2D纹理的坐标](images/Texture2D-in-Dx.png)
 
 * 纹理坐标加倍, 则图像加倍
 
-![2D纹理的坐标加倍][5]
+![2D纹理的坐标加倍](images/Texture2D-double-in-Dx.png)
 
 ### 2D纹理与3D纹理
 
@@ -449,7 +449,7 @@ spaceWorld = Translation \* Rotation \* Scale
 * 3D纹理在2D纹理的基础上增加一个w元素, 用于深度
   * 相当于xyz坐标对应的uvw
 
-![uvw坐标示意图][6]
+![uvw坐标示意图](images/uvw.jpg)
 
 ### 为每个片面顶点分离纹理坐标的原因
 
@@ -579,7 +579,7 @@ Fragment Shader执行之后——Alpha To Coverage就在此时进行转换
 
 按照顶点定义的先后顺序, 呈顺时针排列的顶点构成的三角形是frontface(以view space为参考), 如下图所示
 
-![DX正面的定义][7]
+![DX正面的定义](images/defination-frontface.jpg)
 
 很显然, 根据图, 决定一个面是正面还是反面由两个因素
 
@@ -780,10 +780,84 @@ __int64 nHuge;      // Declares 64-bit integer 与long同义, _int64
 
 如果使用对象封装不利于观察分析底层运行情况
 
-[1]:images/render-pipeline-stages.png
-[2]:images/projection-space.png
-[3]:images/FOV.jpg
-[4]:images/Texture2D-in-Dx.png
-[5]:images/Texture2D-double-in-Dx.png
-[6]:images/uvw.jpg
-[7]:images/defination-frontface.jpg
+## Tutorial15: Simple Lighting
+
+### 光的种类
+
+#### 环境光(Ambient)
+
+* 使得未被光源直射的部分不会变成黑色(场景中的最低亮度保证)
+* 现实中: 受到物体表面的反射照亮整个环境
+* 编程中: 实时渲染无法负担, 因此全局给一个对光线的环境颜色和材质的漫反射颜色进行了逐分量乘法得到的值
+
+#### 漫反射(Diffuse)
+
+假设光在物体表面被均匀反射(通常与物体材质有关), 这样无论摄像机在哪, 进入摄像机的光线数量相同
+
+通过朗伯余弦定律(lambert's cosine law)得到:
+
+* 该像素是否直接受到光照射
+* 光照值
+
+#### 镜面反射(Specular)
+
+"光追"的开销大头, 光滑表面直接将光反射进入摄像机
+
+#### 放射光(Emissive)
+
+类似于灯泡附近的辉光, **并不是**灯泡自己发出的光
+
+### 光源种类
+
+#### 平行光源(Directional Lights & Parallel Lights)
+
+* 没有来源, 只有方向与颜色
+
+![平行光源](images/parallel-light.png)
+
+#### 点光源(Point Lights)
+
+* 一个光源位置, 衰退点(或衰退范围), 颜色
+* 无需光照方向(所有方向都有)
+* 与平行光源的区别:
+  * **有衰退点**
+  * 对于平行光源, 所有物体都通过一个光矢量来计算
+  * 对于点光源, 不同物体的光矢量不同
+    * 举例: 点光源在中心, 左右两侧的物体的右边与左边被分别照亮, 而平行光源则使得他们同一侧被照亮
+
+![点光源](images/point-light.png)
+
+#### 聚点光源(Spotlights)
+
+* 方向, 光源位置, 颜色, 两个夹角, 衰退点
+* 由于信息众多, 因此计算量巨大
+* 如图有两个锥面: 中间锥面更亮, 外侧锥面更暗, 最外侧最暗
+* 最内侧可以看作是光线的镜面反射
+
+![聚点光源](images/spotlight.png)
+
+### 法线(Normals)
+
+定义面的朝向, 此处用来确定表面是否在光线中以及接受到光线的数量
+
+由于转换世界空间中的顶点会使得其法向量不再为单位向量, 因此使用normalize这个函数进行修正
+
+#### 顶点法线(Vertex Normals)
+
+创建顶点时一起创建顶点法线
+
+通过顶点法线来得知该像素点所接受的光线
+
+通过**平均法线**(normal averaging)使得表面更加平滑, 如果不使用平均法线, 则每个三角片面将被点亮, 使得表面不平坦
+
+![顶点法线](images/vertex-normal.png)
+
+#### 面法线(Face Normals)
+
+通常不主动创建面法线, 通过平均顶点法线来创建面法线, 描述面指向的方向
+
+![面法线](images/face-normal.png)
+
+#### 平均法线(Normal Averaging)
+
+使用该顶点获取每个面的法线, 然后对其求平均值, 这样光线将逐渐遍历每个面, 而不是一次遍及整个面
